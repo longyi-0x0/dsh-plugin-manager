@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Plugin manager",
+    "description": "Manage DSH plugins in this profile. Currently checks whether plugins installed from GitHub have new commits: compare the commit recorded in the lockfile against the remote with git ls-remote, and reinstall the same spec when needed."
+  }
+}

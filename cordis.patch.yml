@@ -1,0 +1,9 @@
+# dsh-plugin-manager 的 bundle patch：只挂一行宿主入口。
+#
+# 宿主入口负责两件事：
+#   1. 读出本 profile 里从 GitHub 安装的插件（依赖 spec + 锁文件里的 commit）；
+#   2. 通过 pluginManager 的 removeBundle / installBundle 按原 spec 重装。
+# 浏览器半侧挂在同一行上，向插件页注册「更新」标签页与详情页的三个扩展点。
+- insert:
+    - id: plugin-manager
+      name: 'dsh-plugin-manager'

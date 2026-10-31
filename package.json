@@ -1,0 +1,55 @@
+{
+  "name": "dsh-plugin-manager",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DSH 插件管理器：管理当前 profile 里的插件。当前支持检查并更新从 GitHub 安装的插件：读锁文件看安装的 commit，git ls-remote 看远端，点一下就按原 spec 重装。",
+  "license": "MIT",
+  "main": "index.js",
+  "icon": "icon.svg",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/longyi-0x0/dsh-plugin-manager.git"
+  },
+  "homepage": "https://github.com/longyi-0x0/dsh-plugin-manager#readme",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client/index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "client",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "plugin-manager",
+    "github"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}
