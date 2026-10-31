@@ -81,7 +81,7 @@ test('客户端向插件页的四个插槽各注册一项', async () => {
   )
   assert.deepEqual(
     registrations.map((entry) => entry.options.id),
-    ['plugin-manager', 'plugin-manager-badge', 'plugin-manager-actions', 'plugin-manager-section'],
+    ['dsh-plugin-manager', 'dsh-plugin-manager-badge', 'dsh-plugin-manager-actions', 'dsh-plugin-manager-section'],
   )
   assert.equal(registrations[0].options.label(), '更新')
   for (const entry of registrations) assert.equal(typeof entry.component, 'function')

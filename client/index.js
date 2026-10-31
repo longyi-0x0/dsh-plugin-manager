@@ -598,16 +598,16 @@ window.__ModuleLoader__.load({
         const safe = makeSafe(t, styles)
 
         ctx.slots.inject('plugins.tab', () =>
-          ctx.slots.register({ name: 'plugins.tab', id: 'plugin-manager', label: () => t('tab'), order: 60 }, safe(makeTab(t, store, styles))),
+          ctx.slots.register({ name: 'plugins.tab', id: 'dsh-plugin-manager', label: () => t('tab'), order: 60 }, safe(makeTab(t, store, styles))),
         )
         ctx.slots.inject('plugins.detail.badge', () =>
-          ctx.slots.register({ name: 'plugins.detail.badge', id: 'plugin-manager-badge', order: 60 }, safe(makeBadge(t, store, styles))),
+          ctx.slots.register({ name: 'plugins.detail.badge', id: 'dsh-plugin-manager-badge', order: 60 }, safe(makeBadge(t, store, styles))),
         )
         ctx.slots.inject('plugins.detail.actions', () =>
-          ctx.slots.register({ name: 'plugins.detail.actions', id: 'plugin-manager-actions', order: 60 }, safe(makeActions(t, store, styles))),
+          ctx.slots.register({ name: 'plugins.detail.actions', id: 'dsh-plugin-manager-actions', order: 60 }, safe(makeActions(t, store, styles))),
         )
         ctx.slots.inject('plugins.detail.section', () =>
-          ctx.slots.register({ name: 'plugins.detail.section', id: 'plugin-manager-section', order: 60 }, safe(makeSection(t, store, styles))),
+          ctx.slots.register({ name: 'plugins.detail.section', id: 'dsh-plugin-manager-section', order: 60 }, safe(makeSection(t, store, styles))),
         )
       },
     }
