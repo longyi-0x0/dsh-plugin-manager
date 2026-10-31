@@ -1,6 +1,6 @@
 # dsh-plugin-manager · 插件管理器
 
-DSH 插件管理器，只做增量：原生插件页、原生「添加插件」对话框和内置插件配置都不动。安装 GitHub 插件继续用原生入口；本插件在「添加插件」下拉菜单里加一个「GitHub 插件更新」入口，打开弹层扫描并更新本 profile 里已安装的 GitHub 来源插件；组合包详情页也会显示更新状态与操作。
+DSH 插件管理器，只做增量：原生插件页、原生「添加插件」对话框和内置插件配置都不动。安装 GitHub 插件继续用原生入口；本插件在「添加插件」下拉菜单里加一个「GitHub 插件更新」入口，打开弹层扫描并更新本 profile 里已安装的 GitHub 来源插件；组合包详情页也会显示更新状态与操作，本插件自己也在可更新之列。
 
 DSH 自带的插件页只管组合包的启停与安装，不跟踪第三方 GitHub 依赖的远端变化：`github:` 依赖在锁文件里钉着安装时的 commit，上游 push 之后本地不会跟着变。插件管理器只补这一段，不接管原生页。
 
@@ -53,6 +53,16 @@ DSH 自带的插件页只管组合包的启停与安装，不跟踪第三方 Git
 
 不能直接重装已被依赖的同名包：HMR 开启时 `installBundle` 会抛 `already-installed`，所以必须先卸载。兼容性检查、组合包对账、HMR 重组仍由 DSH 负责；返回 `application: 'restart-required'` 时按提示重启。更新结束后弹层会重新读取列表，行上或弹层顶部会写明成功、需要重启或失败原因。
 
+## 自更新
+
+本插件自己的行也有「检查 / 更新」按钮。自更新不能先卸载更新器，所以走另一条路：
+
+1. 检查远端默认分支 `HEAD`；
+2. 用 `github:owner/repo#<remote commit>` 调 `installBundle`，不 `removeBundle`；
+3. DSH 在 pnpm 之后用 HMR 替换运行中的插件。
+
+profile 里的 spec 会因此变成 pinned commit；之后自己的检查仍然跟远端 `HEAD` 比对。请求会先返回，安装继续在宿主里跑；DSH 可能重载。若没有变化，重启 DSH；失败原因在宿主日志里，可再点一次或改用 `dsh plugin` 重装。
+
 ## 安装这个插件
 
 产物已提交，从 GitHub 安装不需要现场构建。macOS / Linux 用 `dsh` 命令（桌面版也可写完整路径）：
@@ -95,8 +105,8 @@ dsh plugin --profile desktop add "link:/path/to/dsh-plugin-manager"
 - 不使用 `plugins.tab`，所以没有常驻在原生主列表里的内联区块；更新列表只在「添加插件」菜单打开的弹层里。这是为了不替换原生页。
 - 在无 profile 管理的 guest/二级窗口里，原生页自己会显示「本部署没有可管理的 profile」，本插件的接口也不可用；请在主 DSH 窗口使用。
 - 检查结果只存在宿主内存里，DSH 重启后需要重新检查。
-- 钉死到 40 位 commit 的 spec 显示「钉住 commit」且不提供更新；要换版本得改 spec。
-- 插件管理器不更新自己：自己的行只显示「不更新自己」，重装用 `dsh plugin` 命令或原生安装对话框。
+- 钉死到 40 位 commit 的 spec 显示「钉住 commit」且不提供更新；本插件自己的行例外：自更新后 spec 会变成 pinned，但仍跟远端 HEAD 检查。
+- 自更新会改写本插件的 profile spec 为 pinned commit；没有 HMR 或重载后没变化时重启 DSH。失败原因在宿主日志里，可再点一次或改用 `dsh plugin` 重装。
 - 卸载成功而安装失败时插件会留在未安装状态；弹层顶部会保留错误和原 spec，可用原生「添加插件」重新安装。
 
 ## 实现备注

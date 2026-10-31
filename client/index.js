@@ -60,9 +60,10 @@ window.__ModuleLoader__.load({
         updatingHint: '正在按原 spec 卸载重装…',
         checkOne: '检查',
         retry: '重试',
-        selfManaged: '不更新自己',
         noteUpdated: '已重装完成',
         noteRestart: '已重装，重启 DSH 后生效',
+        noteSelfUpdate: '自更新已开始；DSH 重载插件后生效。若没有变化，重启 DSH。',
+        selfUpdateHint: '自更新会用远端 commit 重装本插件，DSH 可能重载。',
         badgeUpdate: '有更新',
         badgeError: '扫描失败',
         sectionTitle: 'GitHub 更新',
@@ -117,9 +118,10 @@ window.__ModuleLoader__.load({
         updatingHint: 'Uninstalling and reinstalling the recorded spec…',
         checkOne: 'Check',
         retry: 'Retry',
-        selfManaged: 'Not self-updated',
         noteUpdated: 'Reinstalled',
         noteRestart: 'Reinstalled; restart DSH to apply',
+        noteSelfUpdate: 'Self-update started; DSH reloads the plugin when done. Restart DSH if nothing changes.',
+        selfUpdateHint: 'Self-update reinstalls this plugin at the remote commit; DSH may reload.',
         badgeUpdate: 'Update available',
         badgeError: 'Scan failed',
         sectionTitle: 'GitHub updates',
@@ -217,7 +219,7 @@ window.__ModuleLoader__.load({
 
     /** 该插件是否值得给一个「更新」按钮：只有明确比对出差异时。 */
     function canUpdate(plugin) {
-      return plugin !== undefined && plugin.self !== true && plugin.state === 'update'
+      return plugin !== undefined && plugin.state === 'update'
     }
 
     function findPlugin(state, name) {
@@ -313,7 +315,12 @@ window.__ModuleLoader__.load({
         let failure = null
         try {
           const data = await requestJson('/update', { method: 'POST', body: JSON.stringify({ name }) })
-          const text = data?.restartRequired === true ? t('noteRestart') : t('noteUpdated')
+          const text =
+            data?.selfUpdate === true
+              ? t('noteSelfUpdate')
+              : data?.restartRequired === true
+                ? t('noteRestart')
+                : t('noteUpdated')
           patch({ notes: { ...state.notes, [name]: { text, tone: 'success' } } })
         } catch (error) {
           failure = { text: messageOf(error), spec: plugin?.spec ?? null }
@@ -517,7 +524,7 @@ window.__ModuleLoader__.load({
         errorLine: { fontSize: 11, lineHeight: 1.55, color: 'var(--dsw-alias-state-error-primary)', overflowWrap: 'anywhere' },
         noteLine: { fontSize: 11, lineHeight: 1.55, color: 'var(--dsw-alias-state-success-primary)', overflowWrap: 'anywhere' },
         rowActions: { display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: 'auto' },
-        selfNote: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' },
+        selfUpdateHint: { fontSize: 11, lineHeight: 1.55, color: 'var(--dsw-alias-label-tertiary)' },
         empty: { padding: '26px 4px 22px' },
         emptyTitle: { margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-secondary)' },
         emptyHint: { margin: '5px 0 0', fontSize: 11, lineHeight: 1.55, color: 'var(--dsw-alias-label-tertiary)' },
@@ -679,7 +686,7 @@ window.__ModuleLoader__.load({
         else if (plugin.enabled === false) tags.push(h('span', { key: 'disabled', style: styles.tag }, t('disabled')))
 
         const commitNodes =
-          plugin.pinned === true || plugin.state === 'pinned'
+          plugin.state === 'pinned' || (plugin.pinned === true && plugin.self !== true)
             ? h('span', { style: styles.commitPinned }, t('commitPinned', { commit: shortSha(plugin.installedCommit) }))
             : [
                 h('span', { key: 'local-label', style: styles.commitLabel }, t('local')),
@@ -690,9 +697,7 @@ window.__ModuleLoader__.load({
               ]
 
         let action = null
-        if (plugin.self === true) {
-          action = h('span', { style: styles.selfNote }, t('selfManaged'))
-        } else if (plugin.state !== 'pinned') {
+        if (plugin.state !== 'pinned') {
           if (update) {
             action = h(
               ControlButton,
@@ -1122,7 +1127,7 @@ window.__ModuleLoader__.load({
         useEnsureLoaded(store)
         if (subject?.kind !== 'bundle') return null
         const plugin = findPlugin(state, subject?.pkg?.name)
-        if (plugin === undefined || plugin.self === true) return null
+        if (plugin === undefined) return null
         const busy = state.busy[plugin.name] === true
         const update = canUpdate(plugin)
         return h(
@@ -1182,12 +1187,11 @@ window.__ModuleLoader__.load({
                 { style: note.tone === 'error' ? styles.errorLine : styles.noteLine, role: note.tone === 'error' ? 'alert' : 'status' },
                 note.text,
               ),
+          plugin.self === true ? h('div', { style: styles.selfUpdateHint }, t('selfUpdateHint')) : null,
           h(
             'div',
             { style: styles.detailActions },
-            plugin.self === true
-              ? h('span', { style: styles.selfNote }, t('selfManaged'))
-              : [
+            [
                   update
                     ? h(
                         ControlButton,

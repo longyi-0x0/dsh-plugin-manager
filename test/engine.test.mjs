@@ -144,24 +144,44 @@ test('update：先 removeBundle，再按原 spec 和原启用状态 installBundl
   assert.equal(result.restartRequired, false)
 })
 
-test('update：更新自己、不可移除、找不到时不碰 manager', async () => {
-  const dir = await makeProfile(lockFor('acme-plugin', INSTALLED))
-  const manager = fakeManager([bundle(), bundle({ name: 'dsh-plugin-manager', source: 'github:owner/updater' })])
+test('update：自更新不卸载自己，用远端 commit 的 pinned spec 安装', async () => {
+  const dir = await makeProfile(lockFor('dsh-plugin-manager', INSTALLED))
+  const manager = fakeManager([bundle({ name: 'dsh-plugin-manager', source: 'github:owner/updater' })])
   const engine = createEngine({ profileDir: dir, manager, runGit: gitTo(REMOTE) })
 
   const self = await engine.update('dsh-plugin-manager')
-  assert.equal(self.ok, false)
-  assert.equal(self.code, 'self')
+  assert.equal(self.ok, true)
+  assert.equal(self.selfUpdate, true)
+  assert.equal(self.target, `github:owner/updater#${REMOTE}`)
+  assert.equal(self.previous.commit, INSTALLED)
+  assert.deepEqual(manager.calls, [['install', `github:owner/updater#${REMOTE}`, { enabled: true }]])
 
-  const notRemovable = createEngine({ profileDir: dir, manager: fakeManager([bundle({ removable: false })]), runGit: gitTo(REMOTE) })
-  const blocked = await notRemovable.update('acme-plugin')
-  assert.equal(blocked.ok, false)
-  assert.equal(blocked.code, 'not-removable')
+  const blocked = createEngine({
+    profileDir: dir,
+    manager: fakeManager([bundle({ removable: false })]),
+    runGit: gitTo(REMOTE),
+  })
+  const notRemovable = await blocked.update('acme-plugin')
+  assert.equal(notRemovable.ok, false)
+  assert.equal(notRemovable.code, 'not-removable')
 
-  const missing = await engine.update('nope')
+  const missingManager = fakeManager([bundle()])
+  const missingEngine = createEngine({ profileDir: dir, manager: missingManager, runGit: gitTo(REMOTE) })
+  const missing = await missingEngine.update('nope')
   assert.equal(missing.ok, false)
   assert.equal(missing.code, 'not-found')
-  assert.deepEqual(manager.calls, [])
+  assert.deepEqual(missingManager.calls, [])
+})
+
+test('check：自己的 spec 钉住 commit 时仍按远端 HEAD 判更新', async () => {
+  const dir = await makeProfile(lockFor('dsh-plugin-manager', INSTALLED))
+  const manager = fakeManager([bundle({ name: 'dsh-plugin-manager', source: `github:owner/updater#${INSTALLED}` })])
+  const engine = createEngine({ profileDir: dir, manager, runGit: gitTo(REMOTE) })
+  const snapshot = await engine.check()
+  assert.equal(snapshot.plugins[0].self, true)
+  assert.equal(snapshot.plugins[0].pinned, true)
+  assert.equal(snapshot.plugins[0].remoteCommit, REMOTE)
+  assert.equal(snapshot.plugins[0].state, 'update')
 })
 
 test('update：卸载成功而安装失败时把状态说清楚', async () => {
