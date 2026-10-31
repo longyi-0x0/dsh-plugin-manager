@@ -28,22 +28,28 @@ window.__ModuleLoader__.load({
     const DICTS = {
       zh: {
         menuTitle: 'GitHub 插件更新',
-        menuHint: '扫描已安装 GitHub 插件的远端新提交',
+        menuHint: '全部检测并更新已安装的 GitHub 插件',
         menuHintUpdates: '{count} 个可更新',
-        menuHintChecking: '正在扫描…',
+        menuHintChecking: '正在检测…',
+        menuHintUpdating: '正在更新…',
         overlayTitle: 'GitHub 插件更新',
-        overlayHint: '安装 GitHub 插件请用页面上的「添加插件」；这里只管理已安装插件的更新。扫描只读远端，更新会按原 spec 卸载重装。',
+        openAll: '全部 GitHub 插件',
+        overlayHint: '安装 GitHub 插件请用页面上的「添加插件」；这里只管理已安装插件的更新。检测只读远端，更新会按原 spec 卸载重装。',
         close: '关闭',
         loading: '正在读取插件清单…',
         summaryFailed: '读取插件清单失败',
         summaryClean: '共 {total} 个 GitHub 来源，暂无更新',
         summaryUpdates: '共 {total} 个 GitHub 来源，{updates} 个可更新',
-        summaryErrorsSuffix: '，{errors} 个扫描失败',
-        scanAll: '扫描更新',
-        scanning: '正在扫描远端…',
-        scanningShort: '扫描中…',
-        scanAt: '上次扫描 {time}',
-        notScanned: '尚未扫描',
+        summaryErrorsSuffix: '，{errors} 个检测失败',
+        scanAll: '全部检测',
+        scanning: '正在检测远端…',
+        scanningShort: '检测中…',
+        scanAt: '上次检测 {time}',
+        notScanned: '尚未检测',
+        updateAll: '全部更新',
+        updateAllProgress: '更新中 {done}/{total}…',
+        updateAllDone: '全部更新完成：成功 {done} 个',
+        updateAllPartial: '更新结束：成功 {done} 个，失败 {failed} 个',
         refresh: '刷新列表',
         listTitle: '已安装的 GitHub 插件',
         listHeadCommit: '本地 → 远端',
@@ -54,7 +60,7 @@ window.__ModuleLoader__.load({
         stateUpdate: '有更新',
         statePinned: '钉住 commit',
         stateUnknown: '无法比对',
-        stateError: '扫描失败',
+        stateError: '检测失败',
         update: '更新',
         updating: '更新中…',
         updatingHint: '正在按原 spec 卸载重装…',
@@ -65,7 +71,7 @@ window.__ModuleLoader__.load({
         noteSelfUpdate: '自更新已开始；DSH 重载插件后生效。若没有变化，重启 DSH。',
         selfUpdateHint: '自更新会用远端 commit 重装本插件，DSH 可能重载。',
         badgeUpdate: '有更新',
-        badgeError: '扫描失败',
+        badgeError: '检测失败',
         sectionTitle: 'GitHub 更新',
         source: '来源',
         installed: '本地 commit',
@@ -86,22 +92,28 @@ window.__ModuleLoader__.load({
       },
       en: {
         menuTitle: 'GitHub plugin updates',
-        menuHint: 'Scan installed GitHub plugins for new commits',
+        menuHint: 'Check and update all installed GitHub plugins',
         menuHintUpdates: '{count} with updates',
-        menuHintChecking: 'Scanning…',
+        menuHintChecking: 'Checking…',
+        menuHintUpdating: 'Updating…',
         overlayTitle: 'GitHub plugin updates',
-        overlayHint: 'Install GitHub plugins with the page’s Add plugin control. This panel manages updates for installed ones; scanning only reads remotes, and updating reinstalls the recorded spec.',
+        openAll: 'All GitHub plugins',
+        overlayHint: 'Install GitHub plugins with the page’s Add plugin control. This panel manages updates for installed ones; checking only reads remotes, and updating reinstalls the recorded spec.',
         close: 'Close',
         loading: 'Reading plugin list…',
         summaryFailed: 'Could not read the plugin list',
         summaryClean: '{total} GitHub source(s), no updates',
         summaryUpdates: '{total} GitHub source(s), {updates} with updates',
         summaryErrorsSuffix: ', {errors} failed',
-        scanAll: 'Scan for updates',
-        scanning: 'Scanning remotes…',
-        scanningShort: 'Scanning…',
-        scanAt: 'Scanned {time}',
-        notScanned: 'Not scanned yet',
+        scanAll: 'Check all',
+        scanning: 'Checking remotes…',
+        scanningShort: 'Checking…',
+        scanAt: 'Checked {time}',
+        notScanned: 'Not checked yet',
+        updateAll: 'Update all',
+        updateAllProgress: 'Updating {done}/{total}…',
+        updateAllDone: 'All updates finished: {done} succeeded',
+        updateAllPartial: 'Updates finished: {done} succeeded, {failed} failed',
         refresh: 'Refresh list',
         listTitle: 'Installed from GitHub',
         listHeadCommit: 'local → remote',
@@ -112,7 +124,7 @@ window.__ModuleLoader__.load({
         stateUpdate: 'Update available',
         statePinned: 'Pinned commit',
         stateUnknown: 'Not comparable',
-        stateError: 'Scan failed',
+        stateError: 'Check failed',
         update: 'Update',
         updating: 'Updating…',
         updatingHint: 'Uninstalling and reinstalling the recorded spec…',
@@ -123,7 +135,7 @@ window.__ModuleLoader__.load({
         noteSelfUpdate: 'Self-update started; DSH reloads the plugin when done. Restart DSH if nothing changes.',
         selfUpdateHint: 'Self-update reinstalls this plugin at the remote commit; DSH may reload.',
         badgeUpdate: 'Update available',
-        badgeError: 'Scan failed',
+        badgeError: 'Check failed',
         sectionTitle: 'GitHub updates',
         source: 'Source',
         installed: 'Local commit',
@@ -228,7 +240,7 @@ window.__ModuleLoader__.load({
     }
 
     function updatingAnywhere(state) {
-      return Object.keys(state.busy).some((key) => state.busy[key] === true)
+      return state.updatingAll === true || Object.keys(state.busy).some((key) => state.busy[key] === true)
     }
 
     // ── 状态仓库 ────────────────────────────────────────────────────────────
@@ -246,6 +258,9 @@ window.__ModuleLoader__.load({
         busy: {},
         notes: {},
         updateError: null,
+        updatingAll: false,
+        updateAllProgress: null,
+        updateAllNote: null,
       }
       let loadPromise = null
       let autoScanDone = false
@@ -296,7 +311,7 @@ window.__ModuleLoader__.load({
       }
 
       async function check(names) {
-        if (state.checking) return
+        if (state.checking || state.updatingAll) return
         patch({ checking: true, error: null })
         let failure = null
         try {
@@ -308,13 +323,14 @@ window.__ModuleLoader__.load({
         patch({ checking: false, ...(failure === null ? {} : { error: failure }) })
       }
 
-      async function update(name) {
-        if (state.busy[name] === true) return
+      async function performUpdate(name) {
+        if (state.busy[name] === true) return { ok: false, skipped: true }
         const plugin = state.plugins.find((candidate) => candidate.name === name) ?? null
         patch({ busy: { ...state.busy, [name]: true }, notes: { ...state.notes, [name]: null }, updateError: null })
         let failure = null
+        let data = null
         try {
-          const data = await requestJson('/update', { method: 'POST', body: JSON.stringify({ name }) })
+          data = await requestJson('/update', { method: 'POST', body: JSON.stringify({ name }) })
           const text =
             data?.selfUpdate === true
               ? t('noteSelfUpdate')
@@ -334,6 +350,44 @@ window.__ModuleLoader__.load({
             busy: { ...state.busy, [name]: false },
           })
         }
+        return { ok: failure === null, data, error: failure?.text ?? null }
+      }
+
+      async function update(name) {
+        if (state.updatingAll) return { ok: false, skipped: true }
+        return performUpdate(name)
+      }
+
+      /** 一键更新所有已检出有更新的 GitHub 插件；自己放到最后，自更新重载前先把别人做完。 */
+      async function updateAll() {
+        if (state.updatingAll || state.checking) return
+        const targets = state.plugins.filter((plugin) => canUpdate(plugin))
+        if (targets.length === 0) return
+        const ordered = [...targets].sort((left, right) => Number(left.self === true) - Number(right.self === true))
+        patch({
+          updatingAll: true,
+          updateAllProgress: { done: 0, total: ordered.length, name: null },
+          updateAllNote: null,
+        })
+        let done = 0
+        let failed = 0
+        for (const plugin of ordered) {
+          patch({ updateAllProgress: { done, total: ordered.length, name: plugin.name } })
+          const result = await performUpdate(plugin.name)
+          done += 1
+          if (result.ok === false) failed += 1
+          if (result.data?.selfUpdate === true) break
+        }
+        const text =
+          failed === 0
+            ? t('updateAllDone', { done })
+            : t('updateAllPartial', { done, failed, total: ordered.length })
+        patch({
+          updatingAll: false,
+          updateAllProgress: null,
+          updateAllNote: { text, tone: failed === 0 ? 'success' : 'error' },
+        })
+        await load()
       }
 
       function ensureLoaded() {
@@ -343,7 +397,7 @@ window.__ModuleLoader__.load({
       /** 标签页第一次打开且宿主还没扫过时自动扫一次；失败后不自动重试。 */
       function ensureScanned() {
         if (autoScanDone) return
-        if (state.loaded === false || state.loading || state.checking) return
+        if (state.loaded === false || state.loading || state.checking || state.updatingAll) return
         if (state.plugins.length === 0) return
         autoScanDone = true
         if (state.checkedAt === null) void check()
@@ -353,7 +407,7 @@ window.__ModuleLoader__.load({
         if (state.updateError !== null) patch({ updateError: null })
       }
 
-      return { subscribe, snapshot, load, check, update, ensureLoaded, ensureScanned, clearUpdateError }
+      return { subscribe, snapshot, load, check, update, updateAll, ensureLoaded, ensureScanned, clearUpdateError }
     }
 
     function useStore(store) {
@@ -811,11 +865,13 @@ window.__ModuleLoader__.load({
         const [focus, setFocus] = useState(false)
         const updates = state.plugins.filter((plugin) => canUpdate(plugin)).length
         const hint =
-          state.checking === true
-            ? t('menuHintChecking')
-            : updates > 0
-              ? t('menuHintUpdates', { count: updates })
-              : t('menuHint')
+          state.updatingAll === true
+            ? t('menuHintUpdating')
+            : state.checking === true
+              ? t('menuHintChecking')
+              : updates > 0
+                ? t('menuHintUpdates', { count: updates })
+                : t('menuHint')
         return h(
           'button',
           {
@@ -903,6 +959,7 @@ window.__ModuleLoader__.load({
         const updates = plugins.filter((plugin) => canUpdate(plugin)).length
         const errors = plugins.filter((plugin) => plugin.state === 'error').length
         const busyAnywhere = updatingAnywhere(state)
+        const updateAllProgress = state.updateAllProgress
         const summary =
           state.loaded === false
             ? state.error === null
@@ -1014,8 +1071,24 @@ window.__ModuleLoader__.load({
                   ControlButton,
                   {
                     styles,
+                    variant: 'primary',
+                    disabled: state.checking || busyAnywhere || updates === 0,
+                    onClick: () => store.updateAll(),
+                    'data-plugin-manager': 'update-all',
+                  },
+                  state.updatingAll
+                    ? t('updateAllProgress', {
+                        done: Math.min((updateAllProgress?.done ?? 0) + 1, updateAllProgress?.total ?? updates),
+                        total: updateAllProgress?.total ?? updates,
+                      })
+                    : t('updateAll'),
+                ),
+                h(
+                  ControlButton,
+                  {
+                    styles,
                     variant: 'secondary',
-                    disabled: state.loading || state.checking,
+                    disabled: state.loading || state.checking || state.updatingAll,
                     onClick: () => store.load(),
                     'data-plugin-manager': 'refresh',
                   },
@@ -1069,6 +1142,17 @@ window.__ModuleLoader__.load({
                       state.updateError.spec === null ? null : h('code', { style: styles.errorSpec }, state.updateError.spec),
                       h('span', { style: styles.errorHint }, t('reinstallHint')),
                     ),
+                  ),
+              state.updateAllNote === null
+                ? null
+                : h(
+                    'div',
+                    {
+                      style: state.updateAllNote.tone === 'error' ? styles.errorLine : styles.noteLine,
+                      role: 'status',
+                      'data-plugin-manager': 'update-all-note',
+                    },
+                    state.updateAllNote.text,
                   ),
               h(
                 'div',
@@ -1145,7 +1229,7 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function makeSection(t, store, styles) {
+    function makeSection(t, store, styles, overlay) {
       return function UpdateSection({ subject }) {
         const state = useStore(store)
         useEnsureLoaded(store)
@@ -1218,6 +1302,17 @@ window.__ModuleLoader__.load({
                     },
                     plugin.state === 'error' ? t('retry') : t('checkOne'),
                   ),
+                  h(
+                    ControlButton,
+                    {
+                      key: 'all',
+                      styles,
+                      variant: 'ghost',
+                      onClick: () => overlay.open(),
+                      'data-plugin-manager': 'open-all',
+                    },
+                    t('openAll'),
+                  ),
                 ],
           ),
         )
@@ -1283,7 +1378,7 @@ window.__ModuleLoader__.load({
           ctx.slots.register({ name: 'plugins.detail.actions', id: 'dsh-plugin-manager-actions', order: 60 }, safe(makeActions(t, store, styles))),
         )
         ctx.slots.inject('plugins.detail.section', () =>
-          ctx.slots.register({ name: 'plugins.detail.section', id: 'dsh-plugin-manager-section', order: 60 }, safe(makeSection(t, store, styles))),
+          ctx.slots.register({ name: 'plugins.detail.section', id: 'dsh-plugin-manager-section', order: 60 }, safe(makeSection(t, store, styles, overlay))),
         )
         ctx.slots.inject('shell.overlay', () =>
           ctx.slots.register({ name: 'shell.overlay', id: 'dsh-plugin-manager-overlay', order: 900 }, safe(makeOverlay(t, store, styles, overlay))),
