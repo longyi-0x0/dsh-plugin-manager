@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-manager",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "description": "DSH 插件管理器：在设置页检测并更新已安装的 GitHub 插件，带待更新标签、刷新并检测、全部更新；不占用页签、不替换原生页面。",

@@ -29,8 +29,7 @@ window.__ModuleLoader__.load({
         settingsNav: '插件管理器',
         settingsTitle: '插件管理器',
         settingsSubtitle: '检测并更新本 profile 里从 GitHub 安装的插件',
-        settingsHint: '安装 GitHub 插件仍用插件页的「添加插件」；这里只管理已安装插件的更新。检测只读远端，更新会按原 spec 卸载重装。',
-        close: '关闭',
+        settingsHint: '安装 GitHub 插件请用插件页的「添加插件」；这里只管理更新。检测只读远端，更新会按原 spec 卸载重装。',
         refreshAndCheck: '刷新并检测',
         pendingUpdate: '待更新',
         loading: '正在读取插件清单…',
@@ -47,7 +46,8 @@ window.__ModuleLoader__.load({
         updateAllDone: '全部更新完成：成功 {done} 个',
         updateAllPartial: '更新结束：成功 {done} 个，失败 {failed} 个',
         listTitle: '已安装的 GitHub 插件',
-        listHeadCommit: '本地 → 远端',
+        listCount: '{count} 个',
+        commitLine: '本地 {local} · 远端 {remote}',
         empty: '还没有从 GitHub 安装的插件。',
         emptyHint: '先用页面上的「添加插件」装一个 GitHub 仓库；这里只显示已安装的 GitHub 来源插件。',
         stateUnchecked: '未检查',
@@ -58,7 +58,6 @@ window.__ModuleLoader__.load({
         stateError: '检测失败',
         update: '更新',
         updating: '更新中…',
-        updatingHint: '正在按原 spec 卸载重装…',
         checkOne: '检查',
         retry: '重试',
         noteUpdated: '已重装完成',
@@ -75,9 +74,6 @@ window.__ModuleLoader__.load({
         never: '未检查',
         componentError: '插件管理器面板渲染失败',
         requestFailed: '请求没有完成：{message}',
-        local: '本地',
-        remoteShort: '远端',
-        commitPinned: '钉住 {commit}',
         lastCheckedAt: '检查于 {time}',
         notChecked: '未检查',
         disabled: '已停用',
@@ -89,8 +85,7 @@ window.__ModuleLoader__.load({
         settingsNav: 'Plugin manager',
         settingsTitle: 'Plugin manager',
         settingsSubtitle: 'Check and update the plugins installed from GitHub in this profile',
-        settingsHint: 'Install GitHub plugins with the page’s Add plugin control. This page manages updates for installed ones; checking only reads remotes, and updating reinstalls the recorded spec.',
-        close: 'Close',
+        settingsHint: 'Install GitHub plugins with the page’s Add plugin control; this page only manages updates. Checking only reads remotes, and updating reinstalls the recorded spec.',
         refreshAndCheck: 'Refresh and check',
         pendingUpdate: 'Update ready',
         loading: 'Reading plugin list…',
@@ -107,7 +102,8 @@ window.__ModuleLoader__.load({
         updateAllDone: 'All updates finished: {done} succeeded',
         updateAllPartial: 'Updates finished: {done} succeeded, {failed} failed',
         listTitle: 'Installed from GitHub',
-        listHeadCommit: 'local → remote',
+        listCount: '{count}',
+        commitLine: 'local {local} · remote {remote}',
         empty: 'No plugins installed from GitHub yet.',
         emptyHint: 'Install a GitHub repository with the page’s Add plugin control; this list only covers installed GitHub sources.',
         stateUnchecked: 'Not checked',
@@ -118,7 +114,6 @@ window.__ModuleLoader__.load({
         stateError: 'Check failed',
         update: 'Update',
         updating: 'Updating…',
-        updatingHint: 'Uninstalling and reinstalling the recorded spec…',
         checkOne: 'Check',
         retry: 'Retry',
         noteUpdated: 'Reinstalled',
@@ -135,9 +130,6 @@ window.__ModuleLoader__.load({
         never: 'Not checked',
         componentError: 'The plugin manager panel failed to render',
         requestFailed: 'Request failed: {message}',
-        local: 'local',
-        remoteShort: 'remote',
-        commitPinned: 'Pinned {commit}',
         lastCheckedAt: 'Checked {time}',
         notChecked: 'Not checked',
         disabled: 'Disabled',
@@ -423,7 +415,7 @@ window.__ModuleLoader__.load({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 6,
-        height: 30,
+        height: 28,
         padding: '0 10px',
         boxSizing: 'border-box',
         border: '1px solid transparent',
@@ -439,17 +431,13 @@ window.__ModuleLoader__.load({
         appearance: 'none',
       }
       return {
-        summary: { margin: 0, fontSize: 12, color: 'var(--dsw-alias-label-secondary)' },
         summaryErrors: { color: 'var(--dsw-alias-state-error-primary)' },
-        scanLine: {
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          margin: '2px 0 0',
+        settingsMeta: {
+          margin: 0,
           fontSize: 11,
+          lineHeight: 1.6,
           color: 'var(--dsw-alias-label-tertiary)',
         },
-        scanDot: { width: 6, height: 6, borderRadius: 999, flexShrink: 0 },
         settingsPage: {
           display: 'flex',
           flexDirection: 'column',
@@ -463,11 +451,11 @@ window.__ModuleLoader__.load({
         settingsTitle: { margin: 0, fontSize: 18, fontWeight: 600 },
         settingsSub: { margin: '4px 0 0', fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' },
         settingsActions: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-        settingsBar: { display: 'flex', flexDirection: 'column', gap: 2 },
         settingsList: {
           display: 'flex',
           flexDirection: 'column',
-          padding: '0 14px',
+          padding: '0 16px',
+          overflow: 'hidden',
           border: '1px solid var(--dsw-alias-border-l1)',
           borderRadius: 12,
           background: 'var(--dsw-alias-bg-l1)',
@@ -478,24 +466,22 @@ window.__ModuleLoader__.load({
           alignItems: 'baseline',
           justifyContent: 'space-between',
           gap: 12,
-          paddingBottom: 8,
+          padding: '12px 0 10px',
           borderBottom: '1px solid var(--dsw-alias-border-l1)',
         },
         listTitle: { margin: 0, fontSize: 12, fontWeight: 600 },
-        listHeadCommit: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' },
+        listCount: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' },
         list: { display: 'flex', flexDirection: 'column' },
         row: {
           display: 'flex',
-          alignItems: 'stretch',
+          alignItems: 'flex-start',
           gap: 12,
-          padding: '12px 8px',
-          margin: '0 -8px',
+          padding: '14px 16px',
+          margin: '0 -16px',
           borderBottom: '1px solid var(--dsw-alias-border-l1)',
-          borderRadius: 8,
           flexWrap: 'wrap',
         },
         rowHover: { background: 'var(--dsw-alias-interactive-bg-hover)' },
-        rail: { width: 3, flexShrink: 0, borderRadius: 2, marginTop: 2, marginBottom: 2 },
         rowMain: { display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 320px', minWidth: 0 },
         rowTop: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
         name: { fontWeight: 600, fontSize: 13 },
@@ -514,32 +500,21 @@ window.__ModuleLoader__.load({
         pendingTag: {
           padding: '1px 7px',
           borderRadius: 999,
-          border: '1px solid currentColor',
+          background: 'var(--dsw-alias-bg-l2)',
           color: 'var(--dsw-alias-state-warn-primary)',
           fontSize: 10,
-          lineHeight: 1.5,
+          lineHeight: '16px',
           whiteSpace: 'nowrap',
         },
-        commitRail: {
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          flexWrap: 'wrap',
+        commitCaption: {
           fontFamily: MONO_FONT,
           fontSize: 11,
-          color: 'var(--dsw-alias-label-secondary)',
+          lineHeight: 1.5,
+          color: 'var(--dsw-alias-label-tertiary)',
+          overflowWrap: 'anywhere',
         },
-        commitLabel: { fontFamily: UI_FONT, fontSize: 10, color: 'var(--dsw-alias-label-tertiary)' },
-        commitSha: {
-          padding: '1px 5px',
-          borderRadius: 4,
-          background: 'var(--dsw-alias-bg-l2)',
-          color: 'var(--dsw-alias-label-secondary)',
-          fontFamily: MONO_FONT,
-          fontSize: 11,
-        },
-        commitArrow: { color: 'var(--dsw-alias-label-tertiary)' },
-        commitPinned: { fontFamily: MONO_FONT, fontSize: 11, color: 'var(--dsw-alias-label-secondary)' },
+        rowState: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' },
+        rowStateError: { color: 'var(--dsw-alias-state-error-primary)' },
         specLine: {
           fontSize: 11,
           color: 'var(--dsw-alias-label-tertiary)',
@@ -549,8 +524,6 @@ window.__ModuleLoader__.load({
           whiteSpace: 'nowrap',
           maxWidth: '100%',
         },
-        rowMeta: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' },
-        updatingHint: { color: 'var(--dsw-alias-state-warn-primary)' },
         errorLine: { fontSize: 11, lineHeight: 1.55, color: 'var(--dsw-alias-state-error-primary)', overflowWrap: 'anywhere' },
         noteLine: { fontSize: 11, lineHeight: 1.55, color: 'var(--dsw-alias-state-success-primary)', overflowWrap: 'anywhere' },
         rowActions: { display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: 'auto' },
@@ -563,11 +536,10 @@ window.__ModuleLoader__.load({
           display: 'flex',
           alignItems: 'stretch',
           gap: 12,
-          padding: '14px 8px',
-          margin: '0 -8px',
+          padding: '14px 16px',
+          margin: '0 -16px',
           borderBottom: '1px solid var(--dsw-alias-border-l1)',
         },
-        skeletonRail: { width: 3, flexShrink: 0, borderRadius: 2, background: 'var(--dsw-alias-bg-skeleton)' },
         skeletonMain: { display: 'flex', flexDirection: 'column', gap: 7, flex: '1 1 auto' },
         skeletonBar: { height: 10, borderRadius: 999, background: 'var(--dsw-alias-bg-skeleton)' },
         errorBanner: {
@@ -683,17 +655,6 @@ window.__ModuleLoader__.load({
         if (plugin.self === true) tags.push(h('span', { key: 'self', style: styles.tag }, t('thisPlugin')))
         else if (plugin.enabled === false) tags.push(h('span', { key: 'disabled', style: styles.tag }, t('disabled')))
 
-        const commitNodes =
-          plugin.state === 'pinned' || (plugin.pinned === true && plugin.self !== true)
-            ? h('span', { style: styles.commitPinned }, t('commitPinned', { commit: shortSha(plugin.installedCommit) }))
-            : [
-                h('span', { key: 'local-label', style: styles.commitLabel }, t('local')),
-                h('code', { key: 'local-sha', style: styles.commitSha }, shortSha(plugin.installedCommit)),
-                h('span', { key: 'arrow', style: styles.commitArrow, 'aria-hidden': 'true' }, '→'),
-                h('span', { key: 'remote-label', style: styles.commitLabel }, t('remoteShort')),
-                h('code', { key: 'remote-sha', style: styles.commitSha }, shortSha(plugin.remoteCommit)),
-              ]
-
         let action = null
         if (plugin.state !== 'pinned') {
           if (update) {
@@ -725,6 +686,7 @@ window.__ModuleLoader__.load({
           }
         }
 
+        const checked = plugin.checkedAt === null ? t('notChecked') : t('lastCheckedAt', { time: formatWhen(plugin.checkedAt) })
         return h(
           'div',
           {
@@ -733,7 +695,6 @@ window.__ModuleLoader__.load({
             onMouseEnter: () => setHover(true),
             onMouseLeave: () => setHover(false),
           },
-          h('span', { style: { ...styles.rail, background: statusColor(plugin.state) }, 'aria-hidden': 'true' }),
           h(
             'div',
             { style: styles.rowMain },
@@ -742,18 +703,23 @@ window.__ModuleLoader__.load({
               { style: styles.rowTop },
               h('span', { style: styles.name }, plugin.name),
               plugin.version == null ? null : h('span', { style: styles.versionTag }, `v${plugin.version}`),
-              plugin.state === 'update'
-                ? h('span', { style: styles.pendingTag }, t('pendingUpdate'))
-                : h(Status, { styles, state: plugin.state }, statusLabel(t, plugin)),
+              plugin.state === 'update' ? h('span', { style: styles.pendingTag }, t('pendingUpdate')) : null,
               tags,
+              plugin.state === 'update'
+                ? null
+                : h(
+                    'span',
+                    { style: { ...styles.rowState, ...(plugin.state === 'error' ? styles.rowStateError : null) } },
+                    statusLabel(t, plugin),
+                  ),
             ),
-            h('div', { style: styles.commitRail }, commitNodes),
             h('span', { style: styles.specLine, title: plugin.spec }, plugin.spec),
             h(
-              'div',
-              { style: styles.rowMeta },
-              h('span', null, plugin.checkedAt === null ? t('notChecked') : t('lastCheckedAt', { time: formatWhen(plugin.checkedAt) })),
-              busy ? h('span', { style: styles.updatingHint }, t('updatingHint')) : null,
+              'span',
+              { style: styles.commitCaption },
+              t('commitLine', { local: shortSha(plugin.installedCommit), remote: shortSha(plugin.remoteCommit) }),
+              ' · ',
+              checked,
             ),
             plugin.error === null || plugin.error === undefined
               ? null
@@ -773,7 +739,7 @@ window.__ModuleLoader__.load({
 
     function makeSettingsSection(t, store, styles) {
       const PluginRow = makePluginRow(t, styles)
-      return function PluginManagerSettings({ close }) {
+      return function PluginManagerSettings() {
         const state = useStore(store)
 
         useEffect(() => {
@@ -812,7 +778,6 @@ window.__ModuleLoader__.load({
                   h(
                     'div',
                     { key: index, style: styles.skeletonRow },
-                    h('span', { style: styles.skeletonRail, 'aria-hidden': 'true' }),
                     h(
                       'div',
                       { style: styles.skeletonMain },
@@ -861,50 +826,33 @@ window.__ModuleLoader__.load({
                 },
                 state.checking ? t('scanningShort') : t('refreshAndCheck'),
               ),
-              h(
-                ControlButton,
-                {
-                  styles,
-                  variant: 'primary',
-                  disabled: state.checking || busyAnywhere || updates === 0,
-                  onClick: () => store.updateAll(),
-                  'data-plugin-manager': 'update-all',
-                },
-                state.updatingAll
-                  ? t('updateAllProgress', {
-                      done: Math.min((updateAllProgress?.done ?? 0) + 1, updateAllProgress?.total ?? updates),
-                      total: updateAllProgress?.total ?? updates,
-                    })
-                  : t('updateAll'),
-              ),
-              typeof close === 'function'
-                ? h(ControlButton, { styles, variant: 'ghost', onClick: () => close() }, t('close'))
+              state.updatingAll || updates > 0
+                ? h(
+                    ControlButton,
+                    {
+                      styles,
+                      variant: 'primary',
+                      disabled: state.checking || busyAnywhere,
+                      onClick: () => store.updateAll(),
+                      'data-plugin-manager': 'update-all',
+                    },
+                    state.updatingAll
+                      ? t('updateAllProgress', {
+                          done: Math.min((updateAllProgress?.done ?? 0) + 1, updateAllProgress?.total ?? updates),
+                          total: updateAllProgress?.total ?? updates,
+                        })
+                      : t('updateAll'),
+                  )
                 : null,
             ),
           ),
           h(
-            'div',
-            { style: styles.settingsBar },
-            h(
-              'p',
-              { style: styles.summary },
-              summary,
-              errors > 0 ? h('span', { style: styles.summaryErrors }, t('summaryErrorsSuffix', { errors })) : null,
-            ),
-            h(
-              'p',
-              { style: styles.scanLine, role: 'status' },
-              h('span', {
-                style: {
-                  ...styles.scanDot,
-                  background: state.checking
-                    ? 'var(--dsw-alias-brand-primary)'
-                    : statusColor(errors > 0 ? 'error' : state.checkedAt === null ? 'unchecked' : 'current'),
-                },
-                'aria-hidden': 'true',
-              }),
-              scanText,
-            ),
+            'p',
+            { style: styles.settingsMeta, role: 'status' },
+            summary,
+            errors > 0 ? h('span', { style: styles.summaryErrors }, t('summaryErrorsSuffix', { errors })) : null,
+            ' · ',
+            scanText,
           ),
           state.error === null
             ? null
@@ -956,9 +904,9 @@ window.__ModuleLoader__.load({
             { style: styles.settingsList },
             h(
               'div',
-              { style: { ...styles.listHead, paddingTop: 12 } },
+              { style: styles.listHead },
               h('h3', { style: styles.listTitle }, t('listTitle')),
-              h('span', { style: styles.listHeadCommit }, t('listHeadCommit')),
+              h('span', { style: styles.listCount }, t('listCount', { count: plugins.length })),
             ),
             skeleton,
             empty,
