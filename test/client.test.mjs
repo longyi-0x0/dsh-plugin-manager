@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 /**
  * 浏览器半侧的装载冒烟：用最小的 window 替身接住 __ModuleLoader__.load，
- * 再用假的 ctx 跑一遍 apply，确认入口、详情贡献与弹层都注册上了。
+ * 再用假的 ctx 跑一遍 apply，确认设置页一节与详情贡献都注册上了。
  * 组件本身不渲染（渲染需要 DSH 的 react / 主题环境），只验证接线。
  */
 
@@ -76,7 +76,7 @@ function fakeContext() {
   return { ctx, registrations }
 }
 
-test('客户端注册添加菜单、详情贡献与弹层，不注册 plugins.tab', async () => {
+test('客户端注册设置页一节与详情贡献，不注册页签/菜单/弹层', async () => {
   const module = await clientModule()
   assert.deepEqual(module.inject, ['slots', 'locale'])
 
@@ -85,22 +85,20 @@ test('客户端注册添加菜单、详情贡献与弹层，不注册 plugins.ta
 
   assert.deepEqual(
     registrations.map((entry) => entry.name),
-    ['plugins.add.actions', 'plugins.detail.badge', 'plugins.detail.actions', 'plugins.detail.section', 'shell.overlay'],
+    ['settings.section', 'plugins.detail.badge', 'plugins.detail.actions', 'plugins.detail.section'],
   )
   assert.deepEqual(
     registrations.map((entry) => entry.options.id),
     [
-      'dsh-plugin-manager-menu',
+      'dsh-plugin-manager-settings',
       'dsh-plugin-manager-badge',
       'dsh-plugin-manager-actions',
       'dsh-plugin-manager-section',
-      'dsh-plugin-manager-overlay',
     ],
   )
-  assert.equal(
-    registrations.some((entry) => entry.name === 'plugins.tab'),
-    false,
-    '不应再注册会替换原生插件页的 plugins.tab',
-  )
+  assert.equal(registrations[0].options.label(), '插件管理器')
+  for (const forbidden of ['plugins.tab', 'plugins.add.actions', 'shell.overlay']) {
+    assert.equal(registrations.some((entry) => entry.name === forbidden), false, `不应再注册 ${forbidden}`)
+  }
   for (const entry of registrations) assert.equal(typeof entry.component, 'function')
 })
