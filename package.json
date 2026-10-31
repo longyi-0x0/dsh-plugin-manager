@@ -1,9 +1,9 @@
 {
   "name": "dsh-plugin-manager",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "DSH 插件管理器：管理当前 profile 里的插件。当前支持检查并更新从 GitHub 安装的插件：读锁文件看安装的 commit，git ls-remote 看远端，点一下就按原 spec 重装。",
+  "description": "DSH 插件管理器：从 GitHub 安装插件，扫描已安装 GitHub 插件的远端更新，并按记录的原 spec 重装。",
   "license": "MIT",
   "main": "index.js",
   "icon": "icon.svg",

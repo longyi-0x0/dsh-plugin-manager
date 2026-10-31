@@ -171,7 +171,7 @@ test('update：卸载成功而安装失败时把状态说清楚', async () => {
   const result = await engine.update('acme-plugin')
   assert.equal(result.ok, false)
   assert.equal(result.code, 'install-failed')
-  assert.match(result.message, /已经被卸载/)
+  assert.match(result.message, /已经被卸载，需要重新安装/)
 })
 
 test('update：两次并发点击被串行化，不交叉', async () => {
