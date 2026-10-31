@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "插件管理器",
-    "description": "管理本 profile 里的 DSH 插件：从 GitHub 安装，扫描已安装 GitHub 插件的远端更新，并按原 spec 重装。"
+    "description": "扫描并更新已安装的 GitHub 插件；安装用插件页原生的「添加插件」入口，不占用页签、不替换原生页面。"
   }
 }

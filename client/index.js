@@ -1,13 +1,12 @@
 /**
  * dsh-plugin-manager 的浏览器半侧。
  *
- * 挂在 DSH 自带插件页的插槽上：
- *   - `plugins.tab`              —— 「GitHub 插件」标签页：从 GitHub 安装、扫描更新、逐项重装；
- *   - `plugins.detail.badge`     —— 组合包详情页标题旁的更新状态；
- *   - `plugins.detail.actions`   —— 详情页页头的检查 / 更新按钮；
- *   - `plugins.detail.section`   —— 详情页下方的来源与 commit 明细。
+ * 只做增量，不占 `plugins.tab`，原生插件页保持原样：
+ *   - `plugins.add.actions`  —— 「添加插件」菜单里的「GitHub 插件更新」入口；
+ *   - `shell.overlay`        —— 更新弹层：扫描全部、列出 GitHub 来源插件、逐项重装；
+ *   - `plugins.detail.badge` / `actions` / `section` —— 组合包详情页里的状态与操作。
  *
- * 安装交给插件页提供的 `install()`，复用 DSH 自己的安装对话框、进度与失败处理；
+ * 安装仍用插件页原生的「添加插件」；本插件只管理已安装 GitHub 插件的更新。
  * 扫描与更新走宿主同源路由 `/dsh-plugin-manager/api`。
  * 纯 JS，无构建；样式内联，只使用 --dsw-alias-* 主题变量。
  */
@@ -23,13 +22,18 @@ window.__ModuleLoader__.load({
     const NS = 'dshPluginManager'
     const UI_FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif'
     const MONO_FONT = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace'
-    const INSTALL_WATCH_MS = 3 * 60 * 1000
 
     // ── 文案 ────────────────────────────────────────────────────────────────
 
     const DICTS = {
       zh: {
-        tab: 'GitHub 插件',
+        menuTitle: 'GitHub 插件更新',
+        menuHint: '扫描已安装 GitHub 插件的远端新提交',
+        menuHintUpdates: '{count} 个可更新',
+        menuHintChecking: '正在扫描…',
+        overlayTitle: 'GitHub 插件更新',
+        overlayHint: '安装 GitHub 插件请用页面上的「添加插件」；这里只管理已安装插件的更新。扫描只读远端，更新会按原 spec 卸载重装。',
+        close: '关闭',
         loading: '正在读取插件清单…',
         summaryFailed: '读取插件清单失败',
         summaryClean: '共 {total} 个 GitHub 来源，暂无更新',
@@ -41,27 +45,10 @@ window.__ModuleLoader__.load({
         scanAt: '上次扫描 {time}',
         notScanned: '尚未扫描',
         refresh: '刷新列表',
-        installTitle: '从 GitHub 安装',
-        installHint: '支持 owner/repo、GitHub 链接、github:owner/repo，可带 #分支或标签。',
-        installLabel: 'GitHub 仓库',
-        installPlaceholder: 'owner/repo 或 https://github.com/owner/repo',
-        installAction: '安装',
-        installUnavailable: '当前 DSH 页面没有提供安装入口；切回「已安装」标签页，用页面自带的「添加插件」。',
-        installErrorEmpty: '先填入 GitHub 仓库地址。',
-        installErrorGithub: '只支持 github.com 上的仓库。',
-        installErrorRepo: '仓库格式不对，应为 owner/repo。',
-        installErrorRef: '分支或标签不能为空，也不能包含空格。',
-        installStarted: '已发起安装；完成后列表会自动刷新。',
-        installDetected: '安装完成，列表已更新。',
-        installTimeout: '没有检测到列表变化；如果安装已完成，点「刷新列表」。',
-        installBusy: '有更新正在进行，完成后再安装。',
-        updateFailed: '更新 {name} 失败：{message}',
-        updateRefill: '填入地址栏',
-        updateSpecFilled: '已填入原 spec，点「安装」重新安装。',
         listTitle: '已安装的 GitHub 插件',
         listHeadCommit: '本地 → 远端',
         empty: '还没有从 GitHub 安装的插件。',
-        emptyHint: '在上面的地址栏填入仓库，安装交给 DSH 的安装对话框完成。',
+        emptyHint: '先用页面上的「添加插件」装一个 GitHub 仓库；这里只显示已安装的 GitHub 来源插件。',
         stateUnchecked: '未检查',
         stateCurrent: '已是最新',
         stateUpdate: '有更新',
@@ -84,7 +71,6 @@ window.__ModuleLoader__.load({
         remote: '远端 commit',
         lastChecked: '最近检查',
         never: '未检查',
-        openBundle: '打开组合包详情',
         componentError: '插件管理器面板渲染失败',
         requestFailed: '请求没有完成：{message}',
         local: '本地',
@@ -94,10 +80,17 @@ window.__ModuleLoader__.load({
         notChecked: '未检查',
         disabled: '已停用',
         thisPlugin: '本插件',
-        hint: '扫描只读远端，不改本地文件；更新会按 profile 里记录的原 spec 卸载重装，安装失败时插件会留在未安装状态，可从上方地址栏重新安装。',
+        updateFailed: '更新 {name} 失败：{message}',
+        reinstallHint: '可以用页面上的「添加插件」按这个 spec 重新安装。',
       },
       en: {
-        tab: 'GitHub plugins',
+        menuTitle: 'GitHub plugin updates',
+        menuHint: 'Scan installed GitHub plugins for new commits',
+        menuHintUpdates: '{count} with updates',
+        menuHintChecking: 'Scanning…',
+        overlayTitle: 'GitHub plugin updates',
+        overlayHint: 'Install GitHub plugins with the page’s Add plugin control. This panel manages updates for installed ones; scanning only reads remotes, and updating reinstalls the recorded spec.',
+        close: 'Close',
         loading: 'Reading plugin list…',
         summaryFailed: 'Could not read the plugin list',
         summaryClean: '{total} GitHub source(s), no updates',
@@ -109,27 +102,10 @@ window.__ModuleLoader__.load({
         scanAt: 'Scanned {time}',
         notScanned: 'Not scanned yet',
         refresh: 'Refresh list',
-        installTitle: 'Install from GitHub',
-        installHint: 'Accepts owner/repo, GitHub URLs, and github:owner/repo with an optional #ref.',
-        installLabel: 'GitHub repository',
-        installPlaceholder: 'owner/repo or https://github.com/owner/repo',
-        installAction: 'Install',
-        installUnavailable: 'This DSH page does not expose its install entry point. Switch to Installed and use the page’s Add plugin control.',
-        installErrorEmpty: 'Enter a GitHub repository first.',
-        installErrorGithub: 'Only github.com repositories are supported.',
-        installErrorRepo: 'That is not a repository path; use owner/repo.',
-        installErrorRef: 'A branch or tag cannot be empty or contain spaces.',
-        installStarted: 'Install started; the list refreshes when it finishes.',
-        installDetected: 'Installed; the list is up to date.',
-        installTimeout: 'No list change detected. If the install finished, use Refresh list.',
-        installBusy: 'An update is in progress; wait for it to finish before installing.',
-        updateFailed: 'Update failed for {name}: {message}',
-        updateRefill: 'Use in install field',
-        updateSpecFilled: 'The recorded spec is in the field; press Install to reinstall.',
         listTitle: 'Installed from GitHub',
         listHeadCommit: 'local → remote',
         empty: 'No plugins installed from GitHub yet.',
-        emptyHint: 'Paste a repository above; DSH’s install dialog handles the rest.',
+        emptyHint: 'Install a GitHub repository with the page’s Add plugin control; this list only covers installed GitHub sources.',
         stateUnchecked: 'Not checked',
         stateCurrent: 'Up to date',
         stateUpdate: 'Update available',
@@ -152,7 +128,6 @@ window.__ModuleLoader__.load({
         remote: 'Remote commit',
         lastChecked: 'Last checked',
         never: 'Not checked',
-        openBundle: 'Open bundle details',
         componentError: 'The plugin manager panel failed to render',
         requestFailed: 'Request failed: {message}',
         local: 'local',
@@ -162,7 +137,8 @@ window.__ModuleLoader__.load({
         notChecked: 'Not checked',
         disabled: 'Disabled',
         thisPlugin: 'This plugin',
-        hint: 'Scanning only reads remotes and writes nothing. Updating uninstalls and reinstalls the recorded spec; a failed install leaves the plugin uninstalled, and the install field above can reinstall it.',
+        updateFailed: 'Update failed for {name}: {message}',
+        reinstallHint: 'Use the page’s Add plugin control with this spec to reinstall.',
       },
     }
 
@@ -207,85 +183,6 @@ window.__ModuleLoader__.load({
         throw error
       }
       return data
-    }
-
-    // ── GitHub 地址解析 ─────────────────────────────────────────────────────
-
-    const GITHUB_NAME = /^[A-Za-z0-9_.-]+$/
-
-    function githubSpec(owner, repo, ref) {
-      if (typeof owner !== 'string' || typeof repo !== 'string') return { error: 'installErrorGithub' }
-      const cleanOwner = owner.trim()
-      const cleanRepo = repo.trim().replace(/\.git$/i, '').replace(/\/+$/, '')
-      if (cleanOwner === '' || cleanRepo === '') return { error: 'installErrorRepo' }
-      if (GITHUB_NAME.test(cleanOwner) === false || GITHUB_NAME.test(cleanRepo) === false) {
-        return { error: 'installErrorRepo' }
-      }
-      let cleanRef
-      if (ref !== undefined) {
-        cleanRef = String(ref).trim()
-        if (cleanRef === '' || /\s/.test(cleanRef)) return { error: 'installErrorRef' }
-      }
-      const suffix = cleanRef === undefined ? '' : `#${cleanRef}`
-      return { spec: `github:${cleanOwner}/${cleanRepo}${suffix}`, label: `${cleanOwner}/${cleanRepo}${suffix}` }
-    }
-
-    /**
-     * 把用户输入折成 profile 里记录的 `github:owner/repo[#ref]`。
-     * 只认 github.com；返回 `{ spec, label }` 或 `{ error: <文案键> }`。
-     */
-    function normalizeGithubInput(raw) {
-      const text = String(raw ?? '').trim()
-      if (text === '') return { error: 'installErrorEmpty' }
-
-      let match = /^github:([^/\s#]+)\/([^/\s#]+?)(?:#(.*))?$/i.exec(text)
-      if (match !== null) return githubSpec(match[1], match[2], match[3])
-      if (/^github:/i.test(text)) return { error: 'installErrorRepo' }
-
-      if (/^git@/i.test(text)) {
-        match = /^git@github\.com:([^/\s#]+)\/([^/\s#]+?)(?:#(.*))?$/i.exec(text)
-        if (match === null) return { error: 'installErrorGithub' }
-        return githubSpec(match[1], match[2], match[3])
-      }
-
-      if (/^(?:git\+)?https?:\/\//i.test(text)) {
-        let url
-        try {
-          url = new URL(text.replace(/^git\+/i, ''))
-        } catch {
-          return { error: 'installErrorGithub' }
-        }
-        if (url.hostname !== 'github.com' && url.hostname !== 'www.github.com') return { error: 'installErrorGithub' }
-        const parts = url.pathname.split('/').filter((part) => part !== '')
-        if (parts.length < 2) return { error: 'installErrorRepo' }
-        let ref
-        if (parts[2] === 'tree') {
-          if (parts.length < 4) return { error: 'installErrorRepo' }
-          ref = parts.slice(3).join('/')
-        } else if (parts.length > 2) {
-          return { error: 'installErrorGithub' }
-        }
-        return githubSpec(parts[0], parts[1], ref)
-      }
-
-      match = /^(?:www\.)?github\.com\/([^/\s#]+)\/([^/\s#]+?)(?:\/tree\/(.+?))?\/?$/i.exec(text)
-      if (match !== null) return githubSpec(match[1], match[2], match[3])
-      if (/github\.com\//i.test(text)) return { error: 'installErrorGithub' }
-
-      match = /^([^/\s#]+)\/([^/\s#]+?)(?:#(.*))?$/.exec(text)
-      if (match !== null) return githubSpec(match[1], match[2], match[3])
-      return { error: 'installErrorGithub' }
-    }
-
-    function signatureOf(plugins) {
-      return plugins
-        .map((plugin) =>
-          [plugin.name, plugin.version ?? '', plugin.installedCommit ?? '', plugin.spec ?? '', plugin.enabled === false ? '0' : '1'].join(
-            '\u0000',
-          ),
-        )
-        .sort()
-        .join('\u0001')
     }
 
     // ── 状态 ────────────────────────────────────────────────────────────────
@@ -488,92 +385,66 @@ window.__ModuleLoader__.load({
         appearance: 'none',
       }
       return {
-        wrap: {
+        overlayBackdrop: {
+          position: 'fixed',
+          inset: 0,
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+          background: 'var(--dsw-alias-bg-mask-1)',
+        },
+        overlayPanel: {
           display: 'flex',
           flexDirection: 'column',
-          gap: 18,
-          padding: '18px 4px 10px',
-          font: `13px/1.55 ${UI_FONT}`,
-          color: 'var(--dsw-alias-label-primary)',
+          width: 'min(760px, 100%)',
+          maxHeight: 'min(84vh, 760px)',
+          minHeight: 0,
+          overflow: 'hidden',
+          borderRadius: 14,
+          border: '1px solid var(--dsw-alias-border-l1)',
+          background: 'var(--dsw-alias-bg-layer-2)',
+          outline: 'none',
         },
-        head: {
+        overlayHead: {
           display: 'flex',
           alignItems: 'flex-start',
           justifyContent: 'space-between',
           gap: 16,
           flexWrap: 'wrap',
+          padding: '16px 18px 12px',
+          borderBottom: '1px solid var(--dsw-alias-border-l1)',
         },
-        title: { margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em' },
-        summary: { margin: '5px 0 0', fontSize: 12, color: 'var(--dsw-alias-label-secondary)' },
+        overlayHeadMain: { display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: '1 1 320px' },
+        overlayTitle: { margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em' },
+        summary: { margin: '3px 0 0', fontSize: 12, color: 'var(--dsw-alias-label-secondary)' },
         summaryErrors: { color: 'var(--dsw-alias-state-error-primary)' },
         scanLine: {
           display: 'flex',
           alignItems: 'center',
           gap: 6,
-          margin: '4px 0 0',
+          margin: '2px 0 0',
           fontSize: 11,
           color: 'var(--dsw-alias-label-tertiary)',
         },
         scanDot: { width: 6, height: 6, borderRadius: 999, flexShrink: 0 },
-        actions: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-        installSection: {
-          padding: 14,
-          borderRadius: 12,
-          border: '1px solid var(--dsw-alias-border-l1)',
-          background: 'var(--dsw-alias-bg-l1)',
-        },
-        installHead: {
+        overlayActions: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+        overlayBody: {
           display: 'flex',
-          alignItems: 'baseline',
-          justifyContent: 'space-between',
-          gap: 12,
-          flexWrap: 'wrap',
-          marginBottom: 10,
+          flexDirection: 'column',
+          gap: 8,
+          minHeight: 0,
+          padding: '12px 18px 4px',
+          overflow: 'auto',
         },
-        installTitle: { margin: 0, fontSize: 13, fontWeight: 600 },
-        installHint: {
+        overlayHint: {
           margin: 0,
-          flex: '1 1 280px',
-          minWidth: 0,
+          padding: '10px 18px 14px',
           fontSize: 11,
-          lineHeight: 1.55,
-          color: 'var(--dsw-alias-label-tertiary)',
+          lineHeight: 1.6,
+          color: 'var(--dsw-alias-label-caption)',
         },
-        installForm: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-        input: {
-          flex: '1 1 260px',
-          minWidth: 0,
-          height: 34,
-          padding: '0 10px',
-          boxSizing: 'border-box',
-          border: '1px solid var(--dsw-alias-border-l2)',
-          borderRadius: 8,
-          background: 'var(--dsw-alias-bg-base)',
-          color: 'var(--dsw-alias-label-primary)',
-          fontFamily: MONO_FONT,
-          fontSize: 12,
-          lineHeight: '32px',
-          outline: 'none',
-        },
-        inputFocus: {
-          borderColor: 'var(--dsw-alias-brand-primary)',
-          boxShadow: '0 0 0 1px var(--dsw-alias-brand-primary)',
-        },
-        inputInvalid: {
-          borderColor: 'var(--dsw-alias-state-error-primary)',
-          boxShadow: '0 0 0 1px var(--dsw-alias-state-error-primary)',
-        },
-        inputDisabled: { opacity: 0.6, cursor: 'not-allowed' },
-        installMessage: {
-          margin: '8px 0 0',
-          fontSize: 11,
-          lineHeight: 1.55,
-          color: 'var(--dsw-alias-label-tertiary)',
-          overflowWrap: 'anywhere',
-        },
-        installError: { color: 'var(--dsw-alias-state-error-primary)' },
-        installNote: { color: 'var(--dsw-alias-state-success-primary)' },
-        listSection: { display: 'flex', flexDirection: 'column' },
         listHead: {
           display: 'flex',
           alignItems: 'baseline',
@@ -599,20 +470,7 @@ window.__ModuleLoader__.load({
         rail: { width: 3, flexShrink: 0, borderRadius: 2, marginTop: 2, marginBottom: 2 },
         rowMain: { display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 320px', minWidth: 0 },
         rowTop: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-        name: { fontWeight: 600 },
-        nameButton: {
-          border: 'none',
-          background: 'none',
-          padding: 0,
-          margin: 0,
-          color: 'var(--dsw-alias-label-primary)',
-          font: 'inherit',
-          fontWeight: 600,
-          fontSize: 13,
-          textAlign: 'left',
-          cursor: 'pointer',
-        },
-        nameButtonHover: { textDecoration: 'underline', textUnderlineOffset: 2 },
+        name: { fontWeight: 600, fontSize: 13 },
         versionTag: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', fontFamily: MONO_FONT },
         status: { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, whiteSpace: 'nowrap' },
         statusDot: { width: 6, height: 6, borderRadius: 999, flexShrink: 0, background: 'currentColor' },
@@ -660,7 +518,7 @@ window.__ModuleLoader__.load({
         noteLine: { fontSize: 11, lineHeight: 1.55, color: 'var(--dsw-alias-state-success-primary)', overflowWrap: 'anywhere' },
         rowActions: { display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: 'auto' },
         selfNote: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' },
-        empty: { padding: '30px 4px 26px' },
+        empty: { padding: '26px 4px 22px' },
         emptyTitle: { margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-secondary)' },
         emptyHint: { margin: '5px 0 0', fontSize: 11, lineHeight: 1.55, color: 'var(--dsw-alias-label-tertiary)' },
         skeletonList: { display: 'flex', flexDirection: 'column' },
@@ -687,7 +545,18 @@ window.__ModuleLoader__.load({
           background: 'var(--dsw-alias-bg-l1)',
         },
         errorText: { flex: '1 1 260px', fontSize: 12, lineHeight: 1.55, color: 'var(--dsw-alias-state-error-primary)', overflowWrap: 'anywhere' },
-        hint: { margin: 0, fontSize: 11, lineHeight: 1.6, color: 'var(--dsw-alias-label-caption)' },
+        errorStack: { display: 'flex', flexDirection: 'column', gap: 5, flex: '1 1 260px', minWidth: 0 },
+        errorSpec: {
+          alignSelf: 'flex-start',
+          padding: '2px 6px',
+          borderRadius: 4,
+          background: 'var(--dsw-alias-bg-l2)',
+          color: 'var(--dsw-alias-label-secondary)',
+          fontFamily: MONO_FONT,
+          fontSize: 11,
+          overflowWrap: 'anywhere',
+        },
+        errorHint: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', lineHeight: 1.5 },
         buttonBase,
         buttonPrimary: {
           background: 'var(--dsw-alias-brand-primary)',
@@ -721,6 +590,38 @@ window.__ModuleLoader__.load({
         ddText: { margin: 0, color: 'var(--dsw-alias-label-secondary)' },
         detailActions: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
         badge: { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, whiteSpace: 'nowrap' },
+        menuItem: {
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 10,
+          width: '100%',
+          padding: '8px 10px',
+          boxSizing: 'border-box',
+          border: 'none',
+          borderRadius: 6,
+          background: 'transparent',
+          color: 'var(--dsw-alias-label-primary)',
+          fontFamily: 'inherit',
+          fontSize: 12,
+          textAlign: 'left',
+          cursor: 'pointer',
+        },
+        menuItemHover: { background: 'var(--dsw-alias-interactive-bg-hover)' },
+        menuItemFocus: { outline: '2px solid var(--dsw-alias-brand-primary)', outlineOffset: 1 },
+        menuItemIcon: { flexShrink: 0, marginTop: 1, color: 'var(--dsw-alias-label-secondary)' },
+        menuItemBody: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: '1 1 auto' },
+        menuItemTitleRow: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 },
+        menuItemTitle: { fontSize: 12, fontWeight: 500, color: 'var(--dsw-alias-label-primary)' },
+        menuItemHint: { fontSize: 11, lineHeight: 1.4, color: 'var(--dsw-alias-label-tertiary)' },
+        menuItemHintUpdates: { color: 'var(--dsw-alias-state-warn-primary)' },
+        menuItemBadge: {
+          padding: '0 6px',
+          borderRadius: 999,
+          background: 'var(--dsw-alias-bg-l2)',
+          color: 'var(--dsw-alias-state-warn-primary)',
+          fontSize: 10,
+          lineHeight: '16px',
+        },
       }
     }
 
@@ -764,35 +665,10 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function NameButton({ styles, t, plugin, openPackage }) {
-      const [hover, setHover] = useState(false)
-      const [focus, setFocus] = useState(false)
-      if (openPackage === null) return h('span', { style: styles.name }, plugin.name)
-      return h(
-        'button',
-        {
-          type: 'button',
-          style: {
-            ...styles.nameButton,
-            ...(hover ? styles.nameButtonHover : null),
-            ...(focus ? styles.buttonFocus : null),
-          },
-          title: t('openBundle'),
-          'aria-label': `${t('openBundle')}: ${plugin.name}`,
-          onClick: () => openPackage(plugin.name),
-          onMouseEnter: () => setHover(true),
-          onMouseLeave: () => setHover(false),
-          onFocus: () => setFocus(true),
-          onBlur: () => setFocus(false),
-        },
-        plugin.name,
-      )
-    }
-
     // ── 列表 ────────────────────────────────────────────────────────────────
 
     function makePluginRow(t, styles) {
-      return function PluginRow({ plugin, state, store, openPackage }) {
+      return function PluginRow({ plugin, state, store }) {
         const [hover, setHover] = useState(false)
         const busy = state.busy[plugin.name] === true
         const busyAnywhere = updatingAnywhere(state)
@@ -861,7 +737,7 @@ window.__ModuleLoader__.load({
             h(
               'div',
               { style: styles.rowTop },
-              h(NameButton, { styles, t, plugin, openPackage }),
+              h('span', { style: styles.name }, plugin.name),
               plugin.version == null ? null : h('span', { style: styles.versionTag }, `v${plugin.version}`),
               h(Status, { styles, state: plugin.state }, statusLabel(t, plugin)),
               tags,
@@ -890,97 +766,130 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function makeTab(t, store, styles) {
-      const PluginRow = makePluginRow(t, styles)
-      return function GithubTab(props) {
-        const state = useStore(store)
-        useEnsureLoaded(store)
-        const [input, setInput] = useState('')
-        const [inputFocused, setInputFocused] = useState(false)
-        const [installError, setInstallError] = useState(null)
-        const [installNote, setInstallNote] = useState(null)
-        const [watching, setWatching] = useState(false)
-        const [watchToken, setWatchToken] = useState(0)
-        const baselineRef = useRef(null)
-        const inputRef = useRef(null)
-        const openPackage = typeof props?.openPackage === 'function' ? props.openPackage : null
-        const install = typeof props?.install === 'function' ? props.install : null
-
-        useEffect(() => {
-          store.ensureScanned()
-        }, [store, state.loaded, state.loading, state.plugins.length, state.checkedAt, state.checking])
-
-        useEffect(() => {
-          if (!watching) return undefined
-          const baseline = baselineRef.current
-          if (baseline === null) {
-            setWatching(false)
-            return undefined
-          }
-          let cancelled = false
-          let stopped = false
-          const startedAt = Date.now()
-          const timer = setInterval(async () => {
-            if (cancelled || stopped) return
-            await store.load()
-            if (cancelled || stopped) return
-            const current = store.snapshot().plugins
-            if (signatureOf(current) !== baseline.signature) {
-              stopped = true
-              setWatching(false)
-              setInstallNote(t('installDetected'))
-              const added = current.find((plugin) => baseline.names.has(plugin.name) === false)
-              if (added !== undefined) void store.check([added.name])
-              return
-            }
-            if (Date.now() - startedAt > INSTALL_WATCH_MS) {
-              stopped = true
-              setWatching(false)
-              setInstallNote(t('installTimeout'))
-            }
-          }, 2000)
-          return () => {
-            cancelled = true
-            clearInterval(timer)
-          }
-        }, [watching, watchToken, store, t])
-
-        function submitInstall(event) {
-          if (event !== undefined) event.preventDefault()
-          if (install === null) {
-            setInstallError(t('installUnavailable'))
-            return
-          }
-          if (state.loaded === false) {
-            setInstallError(t('loading'))
-            return
-          }
-          if (updatingAnywhere(state)) {
-            setInstallError(t('installBusy'))
-            return
-          }
-          const normalized = normalizeGithubInput(input)
-          if (normalized.error !== undefined) {
-            setInstallError(t(normalized.error))
-            return
-          }
-          setInstallError(null)
-          setInstallNote(t('installStarted'))
-          store.clearUpdateError()
-          baselineRef.current = {
-            names: new Set(state.plugins.map((plugin) => plugin.name)),
-            signature: signatureOf(state.plugins),
-          }
-          setWatching(true)
-          setWatchToken((value) => value + 1)
+    function createOverlayController() {
+      let open = false
+      const listeners = new Set()
+      const publish = () => {
+        for (const listener of [...listeners]) {
           try {
-            install({ spec: normalized.spec, title: normalized.label })
+            listener()
           } catch (error) {
-            setWatching(false)
-            setInstallNote(null)
-            setInstallError(messageOf(error))
+            console.error('[plugin-manager] overlay listener failed', error)
           }
         }
+      }
+      return {
+        snapshot: () => open,
+        subscribe: (listener) => {
+          listeners.add(listener)
+          return () => {
+            listeners.delete(listener)
+          }
+        },
+        open: () => {
+          if (open) return
+          open = true
+          publish()
+        },
+        close: () => {
+          if (!open) return
+          open = false
+          publish()
+        },
+      }
+    }
+
+    function makeMenuItem(t, store, styles, controller) {
+      return function GitHubUpdatesMenuItem({ onDismiss }) {
+        const state = useStore(store)
+        const [hover, setHover] = useState(false)
+        const [focus, setFocus] = useState(false)
+        const updates = state.plugins.filter((plugin) => canUpdate(plugin)).length
+        const hint =
+          state.checking === true
+            ? t('menuHintChecking')
+            : updates > 0
+              ? t('menuHintUpdates', { count: updates })
+              : t('menuHint')
+        return h(
+          'button',
+          {
+            type: 'button',
+            role: 'menuitem',
+            'data-plugin-manager': 'menu',
+            style: {
+              ...styles.menuItem,
+              ...(hover ? styles.menuItemHover : null),
+              ...(focus ? styles.menuItemFocus : null),
+            },
+            onClick: () => {
+              if (typeof onDismiss === 'function') onDismiss()
+              controller.open()
+            },
+            onMouseEnter: () => setHover(true),
+            onMouseLeave: () => setHover(false),
+            onFocus: () => setFocus(true),
+            onBlur: () => setFocus(false),
+          },
+          h(
+            'svg',
+            {
+              width: 14,
+              height: 14,
+              viewBox: '0 0 16 16',
+              fill: 'none',
+              'aria-hidden': 'true',
+              style: styles.menuItemIcon,
+            },
+            h('path', {
+              d: 'M13 8a5 5 0 1 1-1.46-3.54M13 3v4h-4',
+              stroke: 'currentColor',
+              strokeWidth: 1.5,
+              strokeLinecap: 'round',
+              strokeLinejoin: 'round',
+            }),
+          ),
+          h(
+            'span',
+            { style: styles.menuItemBody },
+            h(
+              'span',
+              { style: styles.menuItemTitleRow },
+              h('span', { style: styles.menuItemTitle }, t('menuTitle')),
+              updates > 0 ? h('span', { style: styles.menuItemBadge }, String(updates)) : null,
+            ),
+            h('span', { style: { ...styles.menuItemHint, ...(updates > 0 ? styles.menuItemHintUpdates : null) } }, hint),
+          ),
+        )
+      }
+    }
+
+    function makeOverlay(t, store, styles, controller) {
+      const PluginRow = makePluginRow(t, styles)
+      return function GitHubUpdatesOverlay() {
+        const state = useStore(store)
+        const [open, setOpen] = useState(controller.snapshot())
+        const panelRef = useRef(null)
+
+        useEffect(() => controller.subscribe(() => setOpen(controller.snapshot())), [controller])
+
+        useEffect(() => {
+          if (!open) return
+          store.ensureLoaded()
+          store.ensureScanned()
+        }, [open, store, state.loaded, state.loading, state.plugins.length, state.checkedAt, state.checking])
+
+        useEffect(() => {
+          if (!open) return undefined
+          const onKeyDown = (event) => {
+            if (event.key === 'Escape') controller.close()
+          }
+          window.addEventListener('keydown', onKeyDown)
+          panelRef.current?.focus?.()
+          return () => window.removeEventListener('keydown', onKeyDown)
+        }, [open, controller])
+
+        if (!open) return null
 
         const plugins = state.plugins
         const ordered = [...plugins].sort(
@@ -1002,12 +911,6 @@ window.__ModuleLoader__.load({
           : state.checkedAt === null
             ? t('notScanned')
             : t('scanAt', { time: formatWhen(state.checkedAt) })
-        const inputStyle = {
-          ...styles.input,
-          ...(inputFocused ? styles.inputFocus : null),
-          ...(installError !== null ? styles.inputInvalid : null),
-          ...(install === null ? styles.inputDisabled : null),
-        }
 
         const skeleton =
           state.error === null && state.loaded === false
@@ -1043,183 +946,143 @@ window.__ModuleLoader__.load({
 
         return h(
           'div',
-          { style: styles.wrap, 'data-plugin-manager': 'tab' },
+          {
+            style: styles.overlayBackdrop,
+            'data-plugin-manager': 'overlay',
+            onMouseDown: (event) => {
+              if (event.target === event.currentTarget) controller.close()
+            },
+          },
           h(
-            'header',
-            { style: styles.head },
+            'div',
+            {
+              ref: panelRef,
+              tabIndex: -1,
+              role: 'dialog',
+              'aria-modal': 'true',
+              'aria-labelledby': 'dsh-plugin-manager-overlay-title',
+              style: styles.overlayPanel,
+            },
             h(
-              'div',
-              { style: { minWidth: 0 } },
-              h('h2', { style: styles.title }, t('tab')),
+              'header',
+              { style: styles.overlayHead },
               h(
-                'p',
-                { style: styles.summary },
-                summary,
-                errors > 0 ? h('span', { style: styles.summaryErrors }, t('summaryErrorsSuffix', { errors })) : null,
-              ),
-              h(
-                'p',
-                { style: styles.scanLine, role: 'status' },
-                h('span', {
-                  style: {
-                    ...styles.scanDot,
-                    background: state.checking
-                      ? 'var(--dsw-alias-brand-primary)'
-                      : statusColor(errors > 0 ? 'error' : state.checkedAt === null ? 'unchecked' : 'current'),
-                  },
-                  'aria-hidden': 'true',
-                }),
-                scanText,
-              ),
-            ),
-            h(
-              'div',
-              { style: styles.actions },
-              h(
-                ControlButton,
-                {
-                  styles,
-                  variant: 'secondary',
-                  disabled: state.loaded === false || state.checking || busyAnywhere || plugins.length === 0,
-                  onClick: () => store.check(),
-                  'data-plugin-manager': 'scan',
-                },
-                state.checking ? t('scanningShort') : t('scanAll'),
-              ),
-              h(
-                ControlButton,
-                {
-                  styles,
-                  variant: 'secondary',
-                  disabled: state.loading || state.checking,
-                  onClick: () => store.load(),
-                  'data-plugin-manager': 'refresh',
-                },
-                t('refresh'),
-              ),
-            ),
-          ),
-          h(
-            'section',
-            { style: styles.installSection, 'data-plugin-manager': 'install-panel' },
-            h(
-              'div',
-              { style: styles.installHead },
-              h('h3', { style: styles.installTitle }, t('installTitle')),
-              h('p', { style: styles.installHint }, t('installHint')),
-            ),
-            h(
-              'form',
-              { style: styles.installForm, onSubmit: submitInstall, 'data-plugin-manager': 'install-form' },
-              h('input', {
-                ref: inputRef,
-                type: 'text',
-                value: input,
-                placeholder: t('installPlaceholder'),
-                'aria-label': t('installLabel'),
-                'aria-invalid': installError !== null,
-                'aria-describedby': 'dsh-plugin-manager-install-message',
-                autoComplete: 'off',
-                spellCheck: false,
-                disabled: install === null,
-                style: inputStyle,
-                onChange: (event) => {
-                  setInput(event.target.value)
-                  if (installError !== null) setInstallError(null)
-                  if (watching === false && installNote !== null) setInstallNote(null)
-                },
-                onFocus: () => setInputFocused(true),
-                onBlur: () => setInputFocused(false),
-                onKeyDown: (event) => {
-                  if (event.key === 'Enter' && (event.nativeEvent?.isComposing === true || event.isComposing === true)) {
-                    event.preventDefault()
-                  }
-                },
-              }),
-              h(
-                ControlButton,
-                {
-                  styles,
-                  variant: 'primary',
-                  type: 'submit',
-                  disabled: install === null || busyAnywhere || state.loaded === false,
-                  'data-plugin-manager': 'install-submit',
-                },
-                t('installAction'),
-              ),
-            ),
-            installError !== null
-              ? h('p', { id: 'dsh-plugin-manager-install-message', style: { ...styles.installMessage, ...styles.installError }, role: 'alert' }, installError)
-              : installNote !== null
-                ? h('p', { id: 'dsh-plugin-manager-install-message', style: { ...styles.installMessage, ...styles.installNote }, role: 'status' }, installNote)
-                : install === null
-                  ? h('p', { id: 'dsh-plugin-manager-install-message', style: { ...styles.installMessage, ...styles.installError } }, t('installUnavailable'))
-                  : null,
-          ),
-          state.error === null
-            ? null
-            : h(
                 'div',
-                { style: styles.errorBanner, role: 'alert' },
-                h('span', { style: styles.errorText }, t('requestFailed', { message: state.error })),
+                { style: styles.overlayHeadMain },
+                h('h2', { id: 'dsh-plugin-manager-overlay-title', style: styles.overlayTitle }, t('overlayTitle')),
+                h(
+                  'p',
+                  { style: styles.summary },
+                  summary,
+                  errors > 0 ? h('span', { style: styles.summaryErrors }, t('summaryErrorsSuffix', { errors })) : null,
+                ),
+                h(
+                  'p',
+                  { style: styles.scanLine, role: 'status' },
+                  h('span', {
+                    style: {
+                      ...styles.scanDot,
+                      background: state.checking
+                        ? 'var(--dsw-alias-brand-primary)'
+                        : statusColor(errors > 0 ? 'error' : state.checkedAt === null ? 'unchecked' : 'current'),
+                    },
+                    'aria-hidden': 'true',
+                  }),
+                  scanText,
+                ),
+              ),
+              h(
+                'div',
+                { style: styles.overlayActions },
+                h(
+                  ControlButton,
+                  {
+                    styles,
+                    variant: 'secondary',
+                    disabled: state.loaded === false || state.checking || busyAnywhere || plugins.length === 0,
+                    onClick: () => store.check(),
+                    'data-plugin-manager': 'scan',
+                  },
+                  state.checking ? t('scanningShort') : t('scanAll'),
+                ),
                 h(
                   ControlButton,
                   {
                     styles,
                     variant: 'secondary',
                     disabled: state.loading || state.checking,
-                    onClick: () => (state.loaded ? store.check() : store.load()),
+                    onClick: () => store.load(),
+                    'data-plugin-manager': 'refresh',
                   },
-                  t('retry'),
+                  t('refresh'),
+                ),
+                h(
+                  ControlButton,
+                  {
+                    styles,
+                    variant: 'ghost',
+                    onClick: () => controller.close(),
+                    'data-plugin-manager': 'close',
+                  },
+                  t('close'),
                 ),
               ),
-          state.updateError === null
-            ? null
-            : h(
-                'div',
-                { style: styles.errorBanner, role: 'alert', 'data-plugin-manager': 'update-error' },
-                h(
-                  'span',
-                  { style: styles.errorText },
-                  t('updateFailed', { name: state.updateError.name, message: state.updateError.text }),
-                ),
-                state.updateError.spec === null
-                  ? null
-                  : h(
+            ),
+            h(
+              'div',
+              { style: styles.overlayBody },
+              state.error === null
+                ? null
+                : h(
+                    'div',
+                    { style: styles.errorBanner, role: 'alert' },
+                    h('span', { style: styles.errorText }, t('requestFailed', { message: state.error })),
+                    h(
                       ControlButton,
                       {
                         styles,
                         variant: 'secondary',
-                        onClick: () => {
-                          setInput(state.updateError.spec)
-                          setInstallError(null)
-                          setInstallNote(t('updateSpecFilled'))
-                          inputRef.current?.focus?.()
-                        },
+                        disabled: state.loading || state.checking,
+                        onClick: () => (state.loaded ? store.check() : store.load()),
                       },
-                      t('updateRefill'),
+                      t('retry'),
                     ),
+                  ),
+              state.updateError === null
+                ? null
+                : h(
+                    'div',
+                    { style: styles.errorBanner, role: 'alert', 'data-plugin-manager': 'update-error' },
+                    h(
+                      'div',
+                      { style: styles.errorStack },
+                      h(
+                        'span',
+                        { style: styles.errorText },
+                        t('updateFailed', { name: state.updateError.name, message: state.updateError.text }),
+                      ),
+                      state.updateError.spec === null ? null : h('code', { style: styles.errorSpec }, state.updateError.spec),
+                      h('span', { style: styles.errorHint }, t('reinstallHint')),
+                    ),
+                  ),
+              h(
+                'div',
+                { style: styles.listHead },
+                h('h3', { style: styles.listTitle }, t('listTitle')),
+                h('span', { style: styles.listHeadCommit }, t('listHeadCommit')),
               ),
-          h(
-            'section',
-            { style: styles.listSection },
-            h(
-              'div',
-              { style: styles.listHead },
-              h('h3', { style: styles.listTitle }, t('listTitle')),
-              h('span', { style: styles.listHeadCommit }, t('listHeadCommit')),
+              skeleton,
+              empty,
+              state.loaded === true && plugins.length > 0
+                ? h(
+                    'div',
+                    { style: styles.list, 'aria-busy': state.checking ? 'true' : 'false' },
+                    ordered.map((plugin) => h(PluginRow, { key: plugin.name, plugin, state, store })),
+                  )
+                : null,
             ),
-            skeleton,
-            empty,
-            state.loaded === true && plugins.length > 0
-              ? h(
-                  'div',
-                  { style: styles.list, 'aria-busy': state.checking ? 'true' : 'false' },
-                  ordered.map((plugin) => h(PluginRow, { key: plugin.name, plugin, state, store, openPackage })),
-                )
-              : null,
+            h('p', { style: styles.overlayHint }, t('overlayHint')),
           ),
-          h('p', { style: styles.hint }, t('hint')),
         )
       }
     }
@@ -1381,7 +1244,6 @@ window.__ModuleLoader__.load({
 
     return {
       inject: ['slots', 'locale'],
-      normalizeGithubInput,
       apply(ctx) {
         const locale = ctx.locale
         const disposeZh = locale.register(NS, 'zh', DICTS.zh)
@@ -1402,9 +1264,13 @@ window.__ModuleLoader__.load({
         const store = createStore(t)
         const styles = makeStyles()
         const safe = makeSafe(t, styles)
+        const overlay = createOverlayController()
 
-        ctx.slots.inject('plugins.tab', () =>
-          ctx.slots.register({ name: 'plugins.tab', id: 'dsh-plugin-manager', label: () => t('tab'), order: 60 }, safe(makeTab(t, store, styles))),
+        ctx.slots.inject('plugins.add.actions', () =>
+          ctx.slots.register(
+            { name: 'plugins.add.actions', id: 'dsh-plugin-manager-menu', order: 60 },
+            safe(makeMenuItem(t, store, styles, overlay)),
+          ),
         )
         ctx.slots.inject('plugins.detail.badge', () =>
           ctx.slots.register({ name: 'plugins.detail.badge', id: 'dsh-plugin-manager-badge', order: 60 }, safe(makeBadge(t, store, styles))),
@@ -1414,6 +1280,9 @@ window.__ModuleLoader__.load({
         )
         ctx.slots.inject('plugins.detail.section', () =>
           ctx.slots.register({ name: 'plugins.detail.section', id: 'dsh-plugin-manager-section', order: 60 }, safe(makeSection(t, store, styles))),
+        )
+        ctx.slots.inject('shell.overlay', () =>
+          ctx.slots.register({ name: 'shell.overlay', id: 'dsh-plugin-manager-overlay', order: 900 }, safe(makeOverlay(t, store, styles, overlay))),
         )
       },
     }

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Plugin manager",
-    "description": "Manage DSH plugins in this profile: install from GitHub, scan installed GitHub plugins for new commits, and reinstall the recorded spec when needed."
+    "description": "Scan and update installed GitHub plugins from the page’s Add plugin menu; install them with the native Add plugin entry. No tab and no native page replacement."
   }
 }

@@ -1,41 +1,41 @@
 # dsh-plugin-manager · 插件管理器
 
-DSH 插件管理器。在插件页里从 GitHub 安装插件、扫描本 profile 里 GitHub 来源插件的远端变化，并按记录的原 spec 重装更新。后续会继续增加插件管理相关功能。
+DSH 插件管理器，只做增量：原生插件页、原生「添加插件」对话框和内置插件配置都不动。安装 GitHub 插件继续用原生入口；本插件在「添加插件」下拉菜单里加一个「GitHub 插件更新」入口，打开弹层扫描并更新本 profile 里已安装的 GitHub 来源插件；组合包详情页也会显示更新状态与操作。
 
-DSH 自带的插件页只管组合包的启停与安装，不跟踪第三方 GitHub 依赖的远端变化：`github:` 依赖在锁文件里钉着安装时的 commit，上游 push 之后本地不会跟着变。插件管理器把「从 GitHub 装」和「装完以后有没有新提交」放在同一个标签页里。
+DSH 自带的插件页只管组合包的启停与安装，不跟踪第三方 GitHub 依赖的远端变化：`github:` 依赖在锁文件里钉着安装时的 commit，上游 push 之后本地不会跟着变。插件管理器只补这一段，不接管原生页。
 
 ## 界面在哪
 
-不新开侧栏入口，全部挂在 DSH 自带**插件**页的插槽上：
+全部挂在 DSH 自带插件页的插槽上，**不注册 `plugins.tab`**：
 
 | 插槽 | 位置 | 内容 |
 | --- | --- | --- |
-| `plugins.tab` | 插件页「已安装」后面的 **GitHub 插件** 标签页 | 顶部从 GitHub 安装；下方是本 profile 里 GitHub 来源插件的清单：本地 → 远端 commit、状态、检查/更新按钮 |
-| `plugins.detail.badge` | 组合包详情页标题旁 | 该包有更新时显示「有更新」，检查失败时显示「扫描失败」 |
+| `plugins.add.actions` | 插件页「添加插件」下拉菜单 | 「GitHub 插件更新」入口；有更新时显示数量，点开弹层 |
+| `shell.overlay` | 全局浮层 | 更新弹层：扫描摘要、GitHub 来源插件列表、逐项更新、关闭 |
+| `plugins.detail.badge` | 组合包详情页标题旁 | 有更新或扫描失败时显示状态 |
 | `plugins.detail.actions` | 组合包详情页页头 | 「检查 / 更新」按钮 |
 | `plugins.detail.section` | 组合包详情页底部 | 来源 spec、本地/远端 commit、最近检查时间与同一组按钮 |
 
-这些插槽是 `@deepseek-ai/dsh-client-ui-plugin-manager` 声明的扩展点：`plugins.tab` 加标签页，`plugins.detail.*` 给「不属于自己的组合包」的详情节页贡献内容。插件页没有「给别人的列表行插按钮」的槽，所以列表动作都放在自己的标签页里。
+这些插槽是 `@deepseek-ai/dsh-client-ui-plugin-manager` 声明的扩展点。原生页的「内置插件配置」「实验性插件」「已安装插件」始终保留；本插件不再用页签替换主列表。
 
 ## 从 GitHub 安装
 
-在「GitHub 插件」标签页顶部的地址栏填仓库，按「安装」。支持：
+安装仍用插件页原生的「添加插件」，它本来就接受 Git 地址，例如：
 
-- `owner/repo`
 - `github:owner/repo`，可带 `#分支或标签`
 - `https://github.com/owner/repo`
 - `https://github.com/owner/repo/tree/<分支或标签>`
 - `git@github.com:owner/repo.git`
 
-提交后地址会折成 `github:owner/repo[#ref]`，再交给插件页自己的安装对话框：包检查、pnpm 下载、构建脚本审批、兼容性检查和失败恢复都由 DSH 完成，插件管理器不自己调 pnpm。安装结束后标签页会自动刷新，并扫描刚装上的插件。
+包检查、pnpm 下载、构建脚本审批、兼容性检查和失败恢复都由原生安装对话框完成。插件管理器不重复实现安装表单，也不改安装流程。
 
-只支持 github.com。npm 包、本地目录和其他 Git 主机请切回「已安装」标签页，用页面自带的「添加插件」入口；停在「GitHub 插件」标签页时该入口会隐藏。
+「添加插件」旁边的箭头菜单里，「GitHub 插件更新」是**更新**入口，不是安装入口。
 
 ## 扫描更新
 
-第一次打开标签页时自动扫一遍：读锁文件里的本地 commit，用 `git ls-remote` 取远端，不一致就是有更新。之后可以点「扫描更新」重扫，或对单行点「检查」。
+打开「添加插件」下拉菜单，选「GitHub 插件更新」。弹层第一次打开时自动扫一遍：读锁文件里的本地 commit，用 `git ls-remote` 取远端，不一致就是有更新。之后可以点「扫描更新」重扫，或对单行点「检查」。
 
-扫描只读远端，不改任何文件。结果只存在宿主内存里，DSH 重启后需要重新扫描。
+扫描只读远端，不改任何文件。结果只存在宿主内存里，DSH 重启后需要重新扫描。关闭弹层不会影响原生插件页。
 
 ## 怎么判定有没有更新
 
@@ -51,7 +51,7 @@ DSH 自带的插件页只管组合包的启停与安装，不跟踪第三方 Git
 1. `manager.removeBundle(name)` 卸载；
 2. `manager.installBundle(原 spec, { enabled: 原启用状态 })` 重装。
 
-不能直接重装已被依赖的同名包：HMR 开启时 `installBundle` 会抛 `already-installed`，所以必须先卸载。兼容性检查、组合包对账、HMR 重组仍由 DSH 负责；返回 `application: 'restart-required'` 时按提示重启。更新结束后列表会重新读取，行上或标签页顶部会写明成功、需要重启或失败原因。
+不能直接重装已被依赖的同名包：HMR 开启时 `installBundle` 会抛 `already-installed`，所以必须先卸载。兼容性检查、组合包对账、HMR 重组仍由 DSH 负责；返回 `application: 'restart-required'` 时按提示重启。更新结束后弹层会重新读取列表，行上或弹层顶部会写明成功、需要重启或失败原因。
 
 ## 安装这个插件
 
@@ -74,7 +74,7 @@ Windows 用桌面版自带的 CLI：
 dsh plugin --profile desktop add "link:/path/to/dsh-plugin-manager"
 ```
 
-重启 DSH 后，插件页会出现「GitHub 插件」标签页，GitHub 来源的组合包详情页会多出更新状态与操作。
+重启 DSH 后，「添加插件」下拉菜单会出现「GitHub 插件更新」，GitHub 来源的组合包详情页会多出更新状态与操作；原生插件页本身不变。
 
 ## 数据接口
 
@@ -90,13 +90,14 @@ dsh plugin --profile desktop add "link:/path/to/dsh-plugin-manager"
 
 ## 限制
 
-- 「GitHub 插件」标签页只认 github.com；gitcode、自建 Git、npm 包与 `link:` 本地依赖不列。
-- 其他来源的安装仍走「已安装」标签页的「添加插件」；本标签页只负责 GitHub 仓库。
-- 安装对话框由 DSH 提供；当前页面没有提供 `install` 入口时，地址栏会禁用并说明原因。
+- 只列已安装、来源是 github.com 的插件；gitcode、自建 Git、npm 包与 `link:` 本地依赖不列。
+- 安装由原生「添加插件」负责；本插件没有自己的安装表单。
+- 不使用 `plugins.tab`，所以没有常驻在原生主列表里的内联区块；更新列表只在「添加插件」菜单打开的弹层里。这是为了不替换原生页。
+- 在无 profile 管理的 guest/二级窗口里，原生页自己会显示「本部署没有可管理的 profile」，本插件的接口也不可用；请在主 DSH 窗口使用。
 - 检查结果只存在宿主内存里，DSH 重启后需要重新检查。
 - 钉死到 40 位 commit 的 spec 显示「钉住 commit」且不提供更新；要换版本得改 spec。
-- 插件管理器不更新自己：自己的行只显示「不更新自己」，重装用 `dsh plugin` 命令或安装对话框。
-- 卸载成功而安装失败时插件会留在未安装状态；错误会留在标签页顶部，并提供「填入地址栏」重新安装。
+- 插件管理器不更新自己：自己的行只显示「不更新自己」，重装用 `dsh plugin` 命令或原生安装对话框。
+- 卸载成功而安装失败时插件会留在未安装状态；弹层顶部会保留错误和原 spec，可用原生「添加插件」重新安装。
 
 ## 测试
 
@@ -104,7 +105,7 @@ dsh plugin --profile desktop add "link:/path/to/dsh-plugin-manager"
 node --test
 ```
 
-Node 20+，无第三方依赖。覆盖：GitHub 输入解析、spec 解析、`git ls-remote` 结果解析与 ref 解析（注入 git 执行器）、锁文件 commit 读取、检查/更新状态机与串行化（注入假 manager）、HTTP 路由的信任围栏与状态码、浏览器半侧四个插槽的注册。
+Node 20+，无第三方依赖。覆盖：spec 解析、`git ls-remote` 结果解析与 ref 解析（注入 git 执行器）、锁文件 commit 读取、检查/更新状态机与串行化（注入假 manager）、HTTP 路由的信任围栏与状态码、浏览器半侧注册添加菜单/详情贡献/弹层，且不注册 `plugins.tab`。
 
 ## 许可
 
