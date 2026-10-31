@@ -25,6 +25,6 @@ export function apply(ctx) {
     manager: ctx.pluginManager,
     logger: ctx.logger,
   })
-  ctx.effect(() => registerRoutes(ctx, engine), 'plugin-manager: routes')
+  ctx.effect(() => registerRoutes(ctx, engine), 'dsh-plugin-manager: routes')
   ctx.logger?.info?.(`dsh-plugin-manager: 检查范围 ${profileDir}`)
 }

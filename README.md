@@ -99,6 +99,10 @@ dsh plugin --profile desktop add "link:/path/to/dsh-plugin-manager"
 - 插件管理器不更新自己：自己的行只显示「不更新自己」，重装用 `dsh plugin` 命令或原生安装对话框。
 - 卸载成功而安装失败时插件会留在未安装状态；弹层顶部会保留错误和原 spec，可用原生「添加插件」重新安装。
 
+## 实现备注
+
+bundle patch 的行 id 必须是 `dsh-plugin-manager`，不能写成 `plugin-manager`。基础包用 `id: plugin-manager` 挂 `@deepseek-ai/dsh-plugin-manager`（profile 管理服务）；同名 `insert` 会把它顶掉，插件页会显示「本部署没有可管理的 profile」。`test/manifest.test.mjs` 守住这条。
+
 ## 测试
 
 ```bash
