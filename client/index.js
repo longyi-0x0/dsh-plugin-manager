@@ -33,7 +33,6 @@ window.__ModuleLoader__.load({
         menuHintChecking: '正在检测…',
         menuHintUpdating: '正在更新…',
         overlayTitle: 'GitHub 插件更新',
-        openAll: '全部 GitHub 插件',
         overlayHint: '安装 GitHub 插件请用页面上的「添加插件」；这里只管理已安装插件的更新。检测只读远端，更新会按原 spec 卸载重装。',
         close: '关闭',
         loading: '正在读取插件清单…',
@@ -97,7 +96,6 @@ window.__ModuleLoader__.load({
         menuHintChecking: 'Checking…',
         menuHintUpdating: 'Updating…',
         overlayTitle: 'GitHub plugin updates',
-        openAll: 'All GitHub plugins',
         overlayHint: 'Install GitHub plugins with the page’s Add plugin control. This panel manages updates for installed ones; checking only reads remotes, and updating reinstalls the recorded spec.',
         close: 'Close',
         loading: 'Reading plugin list…',
@@ -1229,7 +1227,7 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function makeSection(t, store, styles, overlay) {
+    function makeSection(t, store, styles) {
       return function UpdateSection({ subject }) {
         const state = useStore(store)
         useEnsureLoaded(store)
@@ -1302,17 +1300,6 @@ window.__ModuleLoader__.load({
                     },
                     plugin.state === 'error' ? t('retry') : t('checkOne'),
                   ),
-                  h(
-                    ControlButton,
-                    {
-                      key: 'all',
-                      styles,
-                      variant: 'ghost',
-                      onClick: () => overlay.open(),
-                      'data-plugin-manager': 'open-all',
-                    },
-                    t('openAll'),
-                  ),
                 ],
           ),
         )
@@ -1378,7 +1365,7 @@ window.__ModuleLoader__.load({
           ctx.slots.register({ name: 'plugins.detail.actions', id: 'dsh-plugin-manager-actions', order: 60 }, safe(makeActions(t, store, styles))),
         )
         ctx.slots.inject('plugins.detail.section', () =>
-          ctx.slots.register({ name: 'plugins.detail.section', id: 'dsh-plugin-manager-section', order: 60 }, safe(makeSection(t, store, styles, overlay))),
+          ctx.slots.register({ name: 'plugins.detail.section', id: 'dsh-plugin-manager-section', order: 60 }, safe(makeSection(t, store, styles))),
         )
         ctx.slots.inject('shell.overlay', () =>
           ctx.slots.register({ name: 'shell.overlay', id: 'dsh-plugin-manager-overlay', order: 900 }, safe(makeOverlay(t, store, styles, overlay))),
