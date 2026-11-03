@@ -1,13 +1,18 @@
 /**
  * dsh-plugin-manager 宿主入口。
  *
- * 挂一行、注册四条只读/变更接口；检查与更新的全部业务逻辑在 lib/engine.js。
+ * 挂一行、注册一组只读/变更接口；检查与更新的全部业务逻辑在 lib/engine.js，
+ * 自动检测与自动更新的调度在 lib/auto.js，三个开关存在 profile 目录的
+ * `dsh-plugin-manager.json` 里。
+ *
  * 依赖清单与更新动作都走 DSH 自己的 pluginManager 服务，不自己碰 pnpm 与 profile 文件，
  * 这样兼容性检查、组合包对账与 HMR 重组仍然由 DSH 负责。
  */
 
+import { createAutoUpdater } from './lib/auto.js'
 import { createEngine } from './lib/engine.js'
 import { registerRoutes } from './lib/routes.js'
+import { createSettingsStore } from './lib/settings.js'
 
 export const name = 'dsh-plugin-manager'
 
@@ -25,6 +30,30 @@ export function apply(ctx) {
     manager: ctx.pluginManager,
     logger: ctx.logger,
   })
-  ctx.effect(() => registerRoutes(ctx, engine), 'dsh-plugin-manager: routes')
+  const settings = createSettingsStore({ profileDir, logger: ctx.logger })
+  const auto = createAutoUpdater({ engine, settings, logger: ctx.logger })
+
+  let disposed = false
+  ctx.effect(() => registerRoutes(ctx, engine, { auto }), 'dsh-plugin-manager: routes')
+  ctx.effect(
+    () => () => {
+      disposed = true
+      auto.stop()
+    },
+    'dsh-plugin-manager: auto updater',
+  )
+
+  // 先读开关再排定时器：启动检测只应在读过设置之后发生。
+  void settings.load().then(
+    () => {
+      if (disposed) return
+      auto.start()
+    },
+    (error) => {
+      if (disposed) return
+      ctx.logger?.warn?.(`dsh-plugin-manager: 读取自动更新设置失败，按默认值启动：${String(error?.message ?? error)}`)
+      auto.start()
+    },
+  )
   ctx.logger?.info?.(`dsh-plugin-manager: 检查范围 ${profileDir}`)
 }

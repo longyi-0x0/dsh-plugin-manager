@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Plugin manager",
-    "description": "Scan and update installed GitHub plugins from the page’s Add plugin menu; install them with the native Add plugin entry. No tab and no native page replacement."
+    "description": "Scan and update installed GitHub plugins, with optional check on startup, hourly checking and automatic updates; install them with the native Add plugin entry. No tab and no native page replacement."
   }
 }

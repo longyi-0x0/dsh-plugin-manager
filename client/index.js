@@ -2,8 +2,9 @@
  * dsh-plugin-manager 的浏览器半侧。
  *
  * 只做增量，不占 `plugins.tab`，原生插件页保持原样：
- *   - `settings.section`     —— 设置页里的「插件管理器」一节：检测、全部更新、逐项更新；
- *   - `plugins.detail.badge` / `actions` / `section` —— 组合包详情页里的状态与操作。
+ *   - `settings.section`     —— 设置页「插件管理器」一节：自动更新开关、检测、全部更新、逐项更新；
+ *   - `plugins.detail.badge` / `actions` / `section` —— 组合包详情页里的状态与操作；
+ *   - `shell.overlay`        —— 轮询宿主自动检测状态，发现更新时弹窗、自动更新后提示结果。
  *
  * 安装仍用插件页原生的「添加插件」；本插件只管理已安装 GitHub 插件的更新。
  * 扫描与更新走宿主同源路由 `/dsh-plugin-manager/api`。
@@ -14,6 +15,7 @@ window.__ModuleLoader__.load({
   id: 'dsh-plugin-manager',
   factory(require) {
     const React = require('react')
+    const ReactDOM = require('react-dom')
     const h = React.createElement
     const { useEffect, useRef, useState } = React
 
@@ -21,6 +23,16 @@ window.__ModuleLoader__.load({
     const NS = 'dshPluginManager'
     const UI_FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif'
     const MONO_FONT = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace'
+    const createPortal = typeof ReactDOM?.createPortal === 'function' ? ReactDOM.createPortal : null
+
+    /**
+     * 浮层挂到 body：`shell.overlay` 在框架的低 z-index 层叠上下文里，
+     * 原生设置弹窗是 body 上的 1000 层 portal，不跳出去会被盖住。
+     */
+    function portalToBody(node) {
+      if (createPortal === null || typeof document === 'undefined') return node
+      return createPortal(node, document.body)
+    }
 
     // ── 文案 ────────────────────────────────────────────────────────────────
 
@@ -80,6 +92,35 @@ window.__ModuleLoader__.load({
         thisPlugin: '本插件',
         updateFailed: '更新 {name} 失败：{message}',
         reinstallHint: '可以用页面上的「添加插件」按这个 spec 重新安装。',
+        autoUpdateTitle: '自动更新',
+        startupCheck: '启动自动检测',
+        startupCheckDesc: '每次启动 DSH 时检测一次',
+        scheduledCheck: '定时自动检测',
+        scheduledCheckDesc: '每小时检测一次',
+        autoUpdate: '开启自动更新',
+        autoUpdateDesc: '检测到更新后直接更新；关闭时弹窗提示',
+        autoLoading: '正在读取自动更新设置…',
+        autoRunning: '正在自动检测或更新…',
+        autoLastCheck: '最近自动检测 {time}',
+        autoNextCheck: '下次定时检测 {time}',
+        autoNeverChecked: '尚未自动检测',
+        autoResultUpdates: '{updates} 个可更新',
+        autoResultUpdated: '已自动更新 {updated} 个',
+        autoResultFailed: '{failed} 个更新失败',
+        autoResultError: '上次自动检测出错：{message}',
+        autoUpdateError: '自动更新设置出错：{message}',
+        noticeTitle: '发现插件更新',
+        noticeBody: '{count} 个插件有可用更新',
+        noticeLater: '稍后',
+        noticeApply: '立即更新',
+        noticeApplying: '正在更新…',
+        noticeAck: '知道了',
+        noticeBusy: '正在自动检测，请稍后再试',
+        noticeApplyFailed: '立即更新失败：{message}',
+        toastUpdated: '已自动更新 {updated} 个插件',
+        toastUpdatedPartial: '已自动更新 {updated} 个插件，{failed} 个失败',
+        toastFailed: '自动更新有 {failed} 个失败',
+        toastFailedDetail: '自动更新失败：{message}',
       },
       en: {
         settingsNav: 'Plugin manager',
@@ -136,6 +177,35 @@ window.__ModuleLoader__.load({
         thisPlugin: 'This plugin',
         updateFailed: 'Update failed for {name}: {message}',
         reinstallHint: 'Use the page’s Add plugin control with this spec to reinstall.',
+        autoUpdateTitle: 'Automatic updates',
+        startupCheck: 'Check on startup',
+        startupCheckDesc: 'Check once each time DSH starts',
+        scheduledCheck: 'Check hourly',
+        scheduledCheckDesc: 'Check once an hour',
+        autoUpdate: 'Update automatically',
+        autoUpdateDesc: 'Update right away when found; show a prompt when off',
+        autoLoading: 'Reading automatic update settings…',
+        autoRunning: 'Checking or updating automatically…',
+        autoLastCheck: 'Last automatic check {time}',
+        autoNextCheck: 'Next scheduled check {time}',
+        autoNeverChecked: 'No automatic check yet',
+        autoResultUpdates: '{updates} update(s) available',
+        autoResultUpdated: '{updated} updated automatically',
+        autoResultFailed: '{failed} failed to update',
+        autoResultError: 'Last automatic check failed: {message}',
+        autoUpdateError: 'Automatic update settings failed: {message}',
+        noticeTitle: 'Plugin updates found',
+        noticeBody: '{count} plugin(s) have updates available',
+        noticeLater: 'Later',
+        noticeApply: 'Update now',
+        noticeApplying: 'Updating…',
+        noticeAck: 'Got it',
+        noticeBusy: 'An automatic check is running; try again shortly',
+        noticeApplyFailed: 'Update failed: {message}',
+        toastUpdated: 'Updated {updated} plugin(s) automatically',
+        toastUpdatedPartial: 'Updated {updated} plugin(s) automatically, {failed} failed',
+        toastFailed: 'Automatic update had {failed} failure(s)',
+        toastFailedDetail: 'Automatic update failed: {message}',
       },
     }
 
@@ -395,6 +465,150 @@ window.__ModuleLoader__.load({
       return { subscribe, snapshot, load, check, update, updateAll, refreshAndCheck, ensureLoaded, ensureScanned }
     }
 
+    /**
+     * 自动更新开关与通知的共享状态。
+     *
+     * 设置卡与 `shell.overlay` 共用这一份：开关读写宿主 `/state`、`/settings`，
+     * 弹窗/提示条只消费宿主下发的 notice，不在客户端判断该不该更新。
+     */
+    function createAutoStore() {
+      const listeners = new Set()
+      let state = {
+        loaded: false,
+        loading: false,
+        saving: {},
+        settings: { startupCheck: false, scheduledCheck: false, autoUpdate: false },
+        auto: { running: false, lastCheckAt: null, lastCheckReason: null, nextCheckAt: null, lastResult: null },
+        notice: null,
+        error: null,
+      }
+      let loadPromise = null
+      /** 开关写入串行队列：连点两个开关时按点击顺序发请求，避免后到的旧响应把前一次的开关盖回去。 */
+      let settingQueue = Promise.resolve()
+
+      const snapshot = () => state
+      const subscribe = (listener) => {
+        listeners.add(listener)
+        return () => {
+          listeners.delete(listener)
+        }
+      }
+      const patch = (next) => {
+        state = { ...state, ...next }
+        for (const listener of [...listeners]) {
+          try {
+            listener()
+          } catch (error) {
+            console.error('[plugin-manager] listener failed', error)
+          }
+        }
+      }
+
+      function normalizeSettings(raw) {
+        if (raw === null || typeof raw !== 'object') return state.settings
+        return {
+          startupCheck: raw.startupCheck === true,
+          scheduledCheck: raw.scheduledCheck === true,
+          autoUpdate: raw.autoUpdate === true,
+        }
+      }
+
+      function normalizeAuto(raw) {
+        if (raw === null || typeof raw !== 'object') {
+          return { running: false, lastCheckAt: null, lastCheckReason: null, nextCheckAt: null, lastResult: null }
+        }
+        return {
+          running: raw.running === true,
+          lastCheckAt: typeof raw.lastCheckAt === 'number' ? raw.lastCheckAt : null,
+          lastCheckReason: raw.lastCheckReason === 'startup' || raw.lastCheckReason === 'hourly' ? raw.lastCheckReason : null,
+          nextCheckAt: typeof raw.nextCheckAt === 'number' ? raw.nextCheckAt : null,
+          lastResult: raw.lastResult === null || typeof raw.lastResult !== 'object' ? null : raw.lastResult,
+        }
+      }
+
+      function adopt(data) {
+        patch({
+          loaded: true,
+          loading: false,
+          settings: normalizeSettings(data?.settings),
+          auto: normalizeAuto(data?.auto),
+          notice: data?.notice === undefined ? state.notice : data.notice,
+          error: null,
+        })
+      }
+
+      /** 读取宿主状态。已有请求在途中时复用，避免轮询与手动操作互相覆盖。 */
+      async function loadState() {
+        if (loadPromise !== null) return loadPromise
+        loadPromise = (async () => {
+          patch({ loading: true })
+          try {
+            adopt(await requestJson('/state'))
+          } catch (error) {
+            patch({ loading: false, error: messageOf(error) })
+          } finally {
+            loadPromise = null
+          }
+        })()
+        return loadPromise
+      }
+
+      function ensureLoaded() {
+        if (state.loaded === false && loadPromise === null) void loadState()
+      }
+
+      /** 改一个开关：先本地生效，请求串行发出，失败回滚并把原因留在 error 里。 */
+      function setSetting(key, value) {
+        if (state.saving[key] === true) return Promise.resolve()
+        const previous = state.settings[key]
+        patch({ settings: { ...state.settings, [key]: value }, saving: { ...state.saving, [key]: true }, error: null })
+        const task = settingQueue.then(async () => {
+          try {
+            adopt(await requestJson('/settings', { method: 'POST', body: JSON.stringify({ [key]: value }) }))
+          } catch (error) {
+            patch({ settings: { ...state.settings, [key]: previous }, error: messageOf(error) })
+          } finally {
+            patch({ saving: { ...state.saving, [key]: false } })
+          }
+        })
+        settingQueue = task.catch(() => undefined)
+        return task
+      }
+
+      /** 收掉一条通知。回执失败也先清本地，避免提示条卡在页面上；下一轮轮询会带回宿主状态。 */
+      async function dismissNotice(id) {
+        if (typeof id !== 'string' || id === '') return
+        try {
+          await requestJson('/notice/dismiss', { method: 'POST', body: JSON.stringify({ id }) })
+        } catch {
+          // 静默：轮询会纠正。
+        }
+        if (state.notice !== null && state.notice.id === id) patch({ notice: null })
+      }
+
+      /** 弹窗里点「立即更新」：宿主执行更新，返回的结果通知由宿主决定。 */
+      async function applyNotice() {
+        try {
+          const data = await requestJson('/notice/apply', { method: 'POST' })
+          const notice = data?.notice ?? null
+          patch({ notice, error: null })
+          return {
+            ok: data?.ok === true,
+            updated: typeof data?.updated === 'number' ? data.updated : 0,
+            failed: typeof data?.failed === 'number' ? data.failed : 0,
+            code: typeof data?.code === 'string' ? data.code : null,
+            notice,
+          }
+        } catch (error) {
+          const message = messageOf(error)
+          patch({ error: message })
+          return { ok: false, updated: 0, failed: 0, code: 'request-failed', notice: state.notice, error: message }
+        }
+      }
+
+      return { subscribe, snapshot, loadState, ensureLoaded, setSetting, dismissNotice, applyNotice }
+    }
+
     function useStore(store) {
       const [state, setState] = useState(store.snapshot())
       useEffect(() => store.subscribe(() => setState(store.snapshot())), [store])
@@ -458,7 +672,7 @@ window.__ModuleLoader__.load({
           overflow: 'hidden',
           border: '1px solid var(--dsw-alias-border-l1)',
           borderRadius: 12,
-          background: 'var(--dsw-alias-bg-l1)',
+          background: 'var(--dsw-alias-bg-layer-1)',
         },
         settingsHint: { margin: 0, fontSize: 11, lineHeight: 1.6, color: 'var(--dsw-alias-label-caption)' },
         listHead: {
@@ -500,7 +714,7 @@ window.__ModuleLoader__.load({
         pendingTag: {
           padding: '1px 7px',
           borderRadius: 999,
-          background: 'var(--dsw-alias-bg-l2)',
+          background: 'var(--dsw-alias-bg-layer-2)',
           color: 'var(--dsw-alias-state-warn-primary)',
           fontSize: 10,
           lineHeight: '16px',
@@ -551,7 +765,7 @@ window.__ModuleLoader__.load({
           padding: '10px 12px',
           borderRadius: 8,
           borderLeft: '3px solid var(--dsw-alias-state-error-primary)',
-          background: 'var(--dsw-alias-bg-l1)',
+          background: 'var(--dsw-alias-bg-layer-1)',
         },
         errorText: { flex: '1 1 260px', fontSize: 12, lineHeight: 1.55, color: 'var(--dsw-alias-state-error-primary)', overflowWrap: 'anywhere' },
         errorStack: { display: 'flex', flexDirection: 'column', gap: 5, flex: '1 1 260px', minWidth: 0 },
@@ -559,7 +773,7 @@ window.__ModuleLoader__.load({
           alignSelf: 'flex-start',
           padding: '2px 6px',
           borderRadius: 4,
-          background: 'var(--dsw-alias-bg-l2)',
+          background: 'var(--dsw-alias-bg-layer-2)',
           color: 'var(--dsw-alias-label-secondary)',
           fontFamily: MONO_FONT,
           fontSize: 11,
@@ -599,6 +813,153 @@ window.__ModuleLoader__.load({
         ddText: { margin: 0, color: 'var(--dsw-alias-label-secondary)' },
         detailActions: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
         badge: { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, whiteSpace: 'nowrap' },
+        autoCard: {
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '14px 16px',
+          border: '1px solid var(--dsw-alias-border-l1)',
+          borderRadius: 12,
+          background: 'var(--dsw-alias-bg-layer-1)',
+        },
+        autoCardHead: {
+          display: 'flex',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
+          gap: 8,
+          paddingBottom: 10,
+          borderBottom: '1px solid var(--dsw-alias-border-l1)',
+        },
+        autoTitle: { margin: 0, fontSize: 12, fontWeight: 600 },
+        autoRows: { display: 'flex', flexDirection: 'column' },
+        autoRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '12px 0' },
+        autoRowDivider: { borderTop: '1px solid var(--dsw-alias-border-l1)' },
+        autoText: { display: 'flex', flexDirection: 'column', gap: 2, flex: '1 1 auto', minWidth: 0 },
+        autoLabel: { fontSize: 13, fontWeight: 500, lineHeight: 1.4, color: 'var(--dsw-alias-label-primary)' },
+        autoDesc: { fontSize: 11, lineHeight: 1.55, color: 'var(--dsw-alias-label-tertiary)' },
+        switch: {
+          position: 'relative',
+          flexShrink: 0,
+          width: 36,
+          height: 20,
+          padding: 0,
+          boxSizing: 'border-box',
+          border: '1px solid var(--dsw-alias-border-l2)',
+          borderRadius: 999,
+          background: 'var(--dsw-alias-bg-layer-2)',
+          cursor: 'pointer',
+          appearance: 'none',
+          transition: 'background 120ms ease, border-color 120ms ease',
+        },
+        switchOn: { background: 'var(--dsw-alias-brand-primary)', borderColor: 'var(--dsw-alias-brand-primary)' },
+        switchHover: { background: 'var(--dsw-alias-interactive-bg-hover)' },
+        switchHoverOn: { background: 'var(--dsw-alias-button-primary-hover)' },
+        switchThumb: {
+          position: 'absolute',
+          top: 2,
+          left: 2,
+          width: 14,
+          height: 14,
+          borderRadius: 999,
+          background: 'var(--dsw-alias-label-secondary)',
+          transition: 'transform 120ms ease, background 120ms ease',
+        },
+        switchThumbOn: { transform: 'translateX(16px)', background: 'var(--dsw-alias-label-primary-foreground)' },
+        switchFocus: { outline: '2px solid var(--dsw-alias-brand-primary)', outlineOffset: 2 },
+        switchDisabled: { opacity: 0.45, cursor: 'default' },
+        autoStatus: {
+          margin: 0,
+          paddingTop: 10,
+          borderTop: '1px solid var(--dsw-alias-border-l1)',
+          fontSize: 11,
+          lineHeight: 1.6,
+          color: 'var(--dsw-alias-label-tertiary)',
+        },
+        autoErrorRow: {
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
+          paddingTop: 8,
+        },
+        overlayBackdrop: {
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+        },
+        // 遮罩照 DSH 原生弹窗的口径：从顶栏下方开始、半透明蒙层加主题模糊。
+        overlayMask: {
+          position: 'absolute',
+          top: 'var(--dsh-frame-chrome-top, 0px)',
+          right: 0,
+          bottom: 0,
+          left: 0,
+          background: 'var(--dsw-alias-bg-mask-1)',
+          backdropFilter: 'var(--dsw-mask-blur)',
+        },
+        dialog: {
+          position: 'relative',
+          zIndex: 1,
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          width: '100%',
+          maxWidth: 420,
+          maxHeight: 'calc(100vh - 96px)',
+          overflow: 'auto',
+          padding: 18,
+          border: '1px solid var(--dsw-alias-border-l1)',
+          borderRadius: 12,
+          background: 'var(--dsw-alias-bg-layer-1)',
+          color: 'var(--dsw-alias-label-primary)',
+          font: `13px/1.5 ${UI_FONT}`,
+        },
+        dialogTitle: { margin: 0, fontSize: 15, fontWeight: 600 },
+        dialogBody: { margin: 0, fontSize: 12, color: 'var(--dsw-alias-label-secondary)' },
+        noticeList: { display: 'flex', flexDirection: 'column', gap: 8, margin: 0, padding: 0, listStyle: 'none' },
+        noticeItem: { display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', fontSize: 12 },
+        noticeName: { fontWeight: 600, overflowWrap: 'anywhere' },
+        noticeMeta: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', fontFamily: MONO_FONT },
+        dialogActions: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingTop: 4 },
+        toast: {
+          position: 'fixed',
+          left: '50%',
+          bottom: 24,
+          transform: 'translateX(-50%)',
+          zIndex: 1200,
+          boxSizing: 'border-box',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          width: 'max-content',
+          maxWidth: 'min(480px, calc(100vw - 32px))',
+          padding: '10px 12px',
+          border: '1px solid var(--dsw-alias-border-l1)',
+          borderRadius: 10,
+          background: 'var(--dsw-alias-bg-layer-1)',
+          color: 'var(--dsw-alias-label-primary)',
+          font: `12px/1.5 ${UI_FONT}`,
+        },
+        toastBody: { display: 'flex', flexDirection: 'column', gap: 2, flex: '1 1 auto', minWidth: 0 },
+        toastText: { fontSize: 12, lineHeight: 1.5 },
+        toastMessage: {
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+          fontSize: 11,
+          lineHeight: 1.5,
+          color: 'var(--dsw-alias-label-tertiary)',
+          overflowWrap: 'anywhere',
+        },
       }
     }
 
@@ -639,6 +1000,42 @@ window.__ModuleLoader__.load({
         { style: { ...styles.status, color: statusColor(state) } },
         h('span', { style: styles.statusDot, 'aria-hidden': 'true' }),
         children,
+      )
+    }
+
+    /** 设置卡里的开关：按钮语义，`role="switch"` + `aria-checked`。 */
+    function ToggleSwitch({ styles, checked, disabled = false, saving = false, onToggle, labelledBy, settingKey }) {
+      const [hover, setHover] = useState(false)
+      const [focus, setFocus] = useState(false)
+      const inactive = disabled || saving
+      return h(
+        'button',
+        {
+          type: 'button',
+          role: 'switch',
+          'aria-checked': checked ? 'true' : 'false',
+          'aria-labelledby': labelledBy,
+          'aria-busy': saving ? 'true' : undefined,
+          disabled: inactive,
+          'data-plugin-manager': 'auto-switch',
+          'data-setting': settingKey,
+          onClick: () => {
+            if (inactive) return
+            onToggle(!checked)
+          },
+          onMouseEnter: () => setHover(true),
+          onMouseLeave: () => setHover(false),
+          onFocus: () => setFocus(true),
+          onBlur: () => setFocus(false),
+          style: {
+            ...styles.switch,
+            ...(checked ? styles.switchOn : null),
+            ...(hover && inactive === false ? (checked ? styles.switchHoverOn : styles.switchHover) : null),
+            ...(focus ? styles.switchFocus : null),
+            ...(inactive ? styles.switchDisabled : null),
+          },
+        },
+        h('span', { style: { ...styles.switchThumb, ...(checked ? styles.switchThumbOn : null) }, 'aria-hidden': 'true' }),
       )
     }
 
@@ -737,8 +1134,104 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function makeSettingsSection(t, store, styles) {
+    /** 设置页顶部的「自动更新」设置卡：三个开关 + 一行自动检测状态。 */
+    function makeAutoUpdateCard(t, autoStore, styles) {
+      const ROWS = [
+        { key: 'startupCheck', title: 'startupCheck', desc: 'startupCheckDesc' },
+        { key: 'scheduledCheck', title: 'scheduledCheck', desc: 'scheduledCheckDesc' },
+        { key: 'autoUpdate', title: 'autoUpdate', desc: 'autoUpdateDesc' },
+      ]
+      return function AutoUpdateCard() {
+        const state = useStore(autoStore)
+
+        useEffect(() => {
+          autoStore.ensureLoaded()
+        }, [autoStore])
+
+        const auto = state.auto
+        const lastResult = auto.lastResult
+        let statusText
+        if (state.loaded === false && state.error === null) statusText = t('autoLoading')
+        else if (auto.running) statusText = t('autoRunning')
+        else if (auto.lastCheckAt !== null) statusText = t('autoLastCheck', { time: formatWhen(auto.lastCheckAt) })
+        else statusText = t('autoNeverChecked')
+
+        const extras = []
+        if (auto.nextCheckAt !== null) extras.push(t('autoNextCheck', { time: formatWhen(auto.nextCheckAt) }))
+        if (lastResult !== null && typeof lastResult === 'object') {
+          if (Number(lastResult.updates) > 0) extras.push(t('autoResultUpdates', { updates: lastResult.updates }))
+          if (Number(lastResult.updated) > 0) extras.push(t('autoResultUpdated', { updated: lastResult.updated }))
+          if (Number(lastResult.failed) > 0) extras.push(t('autoResultFailed', { failed: lastResult.failed }))
+          if (typeof lastResult.error === 'string' && lastResult.error !== '') {
+            extras.push(t('autoResultError', { message: lastResult.error }))
+          }
+        }
+
+        return h(
+          'section',
+          { style: styles.autoCard, 'data-plugin-manager': 'auto-update' },
+          h('div', { style: styles.autoCardHead }, h('h3', { style: styles.autoTitle }, t('autoUpdateTitle'))),
+          h(
+            'div',
+            { style: styles.autoRows },
+            ROWS.map((row, index) =>
+              h(
+                'div',
+                { key: row.key, style: { ...styles.autoRow, ...(index === 0 ? null : styles.autoRowDivider) } },
+                h(
+                  'div',
+                  { style: styles.autoText },
+                  h('div', { id: `dsh-plugin-manager-setting-${row.key}`, style: styles.autoLabel }, t(row.title)),
+                  h('div', { style: styles.autoDesc }, t(row.desc)),
+                ),
+                h(ToggleSwitch, {
+                  styles,
+                  checked: state.settings[row.key] === true,
+                  disabled: state.loaded === false,
+                  saving: state.saving[row.key] === true,
+                  onToggle: (value) => void autoStore.setSetting(row.key, value),
+                  labelledBy: `dsh-plugin-manager-setting-${row.key}`,
+                  settingKey: row.key,
+                }),
+              ),
+            ),
+          ),
+          h(
+            'p',
+            { style: styles.autoStatus, role: 'status', 'data-plugin-manager': 'auto-status' },
+            extras.length === 0 ? statusText : `${statusText} · ${extras.join(' · ')}`,
+          ),
+          state.error === null
+            ? null
+            : h(
+                'div',
+                { style: styles.autoErrorRow, role: 'alert' },
+                h(
+                  'span',
+                  { style: { ...styles.errorLine, flex: '1 1 240px' } },
+                  t('autoUpdateError', { message: state.error }),
+                ),
+                state.loaded === false
+                  ? h(
+                      ControlButton,
+                      {
+                        styles,
+                        variant: 'secondary',
+                        disabled: state.loading,
+                        onClick: () => void autoStore.loadState(),
+                        'data-plugin-manager': 'auto-retry',
+                      },
+                      t('retry'),
+                    )
+                  : null,
+              ),
+        )
+      }
+    }
+
+    function makeSettingsSection(t, store, autoStore, styles) {
       const PluginRow = makePluginRow(t, styles)
+      const AutoUpdateCard = makeAutoUpdateCard(t, autoStore, styles)
       return function PluginManagerSettings() {
         const state = useStore(store)
 
@@ -846,6 +1339,7 @@ window.__ModuleLoader__.load({
                 : null,
             ),
           ),
+          h(AutoUpdateCard),
           h(
             'p',
             { style: styles.settingsMeta, role: 'status' },
@@ -919,6 +1413,187 @@ window.__ModuleLoader__.load({
               : null,
           ),
           h('p', { style: styles.settingsHint }, t('settingsHint')),
+        )
+      }
+    }
+
+    // ── 自动更新通知（shell.overlay）────────────────────────────────────────
+
+    function makeNoticeOverlay(t, store, autoStore, styles) {
+      return function PluginManagerNotice() {
+        const state = useStore(autoStore)
+        const [applying, setApplying] = useState(false)
+        const [applyError, setApplyError] = useState(null)
+        const previousLastCheck = useRef(null)
+        const dialogRef = useRef(null)
+        const notice = state.notice
+        const noticeId = notice === null || notice === undefined ? null : notice.id
+        const noticeKind = notice === null || notice === undefined ? null : notice.kind
+        const toastId = noticeKind === null || noticeKind === 'updates' ? null : noticeId
+
+        // 挂载即读一次状态，之后每 30 秒轮询；卸载时清掉计时器。
+        useEffect(() => {
+          void autoStore.loadState()
+          const timer = setInterval(() => {
+            void autoStore.loadState()
+          }, 30000)
+          return () => clearInterval(timer)
+        }, [autoStore])
+
+        // 宿主自动检测/自动更新结束时，让插件列表跟上最新结果。
+        useEffect(() => {
+          const lastCheckAt = state.auto.lastCheckAt
+          if (lastCheckAt !== previousLastCheck.current) {
+            previousLastCheck.current = lastCheckAt
+            if (typeof lastCheckAt === 'number') void store.load()
+          }
+        }, [state.auto.lastCheckAt, store])
+
+        // 结果提示条 6 秒后自动收掉。
+        useEffect(() => {
+          if (toastId === null) return undefined
+          const timer = setTimeout(() => {
+            void autoStore.dismissNotice(toastId)
+          }, 6000)
+          return () => clearTimeout(timer)
+        }, [toastId, autoStore])
+
+        // 通知换了一条就复位弹窗里的进行态，避免下一条更新通知沿用上一次的「正在更新」。
+        useEffect(() => {
+          setApplying(false)
+          setApplyError(null)
+        }, [noticeId])
+
+        useEffect(() => {
+          if (noticeKind === 'updates') dialogRef.current?.focus?.()
+        }, [noticeId, noticeKind])
+
+        // Esc 收掉「发现更新」弹窗；正在更新时不理，避免把进行中的操作藏起来。
+        useEffect(() => {
+          if (noticeKind !== 'updates' || noticeId === null) return undefined
+          const onKeyDown = (event) => {
+            if (event.key === 'Escape' && applying === false) void autoStore.dismissNotice(noticeId)
+          }
+          document.addEventListener('keydown', onKeyDown)
+          return () => document.removeEventListener('keydown', onKeyDown)
+        }, [noticeKind, noticeId, applying, autoStore])
+
+        if (notice === null || notice === undefined) return null
+
+        async function applyNotice() {
+          if (applying) return
+          setApplying(true)
+          setApplyError(null)
+          const result = await autoStore.applyNotice()
+          await store.load()
+          setApplying(false)
+          if (result.ok === false) {
+            if (typeof result.error === 'string' && result.error !== '') setApplyError(result.error)
+            else if (result.code === 'busy') setApplyError(t('noticeBusy'))
+          }
+        }
+
+        if (notice.kind === 'updates') {
+          const items = Array.isArray(notice.items) ? notice.items : []
+          return portalToBody(
+            h(
+              'div',
+              { style: styles.overlayBackdrop, 'data-plugin-manager': 'notice-backdrop' },
+              h('div', { style: styles.overlayMask, 'aria-hidden': 'true' }),
+            h(
+              'div',
+              {
+                ref: dialogRef,
+                tabIndex: -1,
+                role: 'dialog',
+                'aria-modal': 'true',
+                'aria-labelledby': 'dsh-plugin-manager-notice-title',
+                'data-plugin-manager': 'notice-dialog',
+                style: styles.dialog,
+              },
+              h('h2', { id: 'dsh-plugin-manager-notice-title', style: styles.dialogTitle }, t('noticeTitle')),
+              h('p', { style: styles.dialogBody }, t('noticeBody', { count: items.length })),
+              items.length === 0
+                ? null
+                : h(
+                    'ul',
+                    { style: styles.noticeList },
+                    items.map((item) =>
+                      h(
+                        'li',
+                        { key: item.name, style: styles.noticeItem },
+                        h('span', { style: styles.noticeName }, item.name),
+                        item.version === null || item.version === undefined
+                          ? null
+                          : h('span', { style: styles.noticeMeta }, `v${item.version}`),
+                        h('span', { style: styles.noticeMeta }, shortSha(item.remoteCommit)),
+                      ),
+                    ),
+                  ),
+              applyError === null
+                ? null
+                : h('div', { style: styles.errorLine, role: 'alert' }, t('noticeApplyFailed', { message: applyError })),
+              h(
+                'div',
+                { style: styles.dialogActions },
+                h(
+                  ControlButton,
+                  {
+                    styles,
+                    variant: 'secondary',
+                    disabled: applying,
+                    onClick: () => void autoStore.dismissNotice(notice.id),
+                    'data-plugin-manager': 'notice-later',
+                  },
+                  t('noticeLater'),
+                ),
+                h(
+                  ControlButton,
+                  {
+                    styles,
+                    variant: 'primary',
+                    disabled: applying,
+                    onClick: () => void applyNotice(),
+                    'data-plugin-manager': 'notice-apply',
+                  },
+                  applying ? t('noticeApplying') : t('noticeApply'),
+                ),
+              ),
+            ),
+            ),
+          )
+        }
+
+        if (notice.kind !== 'updated' && notice.kind !== 'failed') return null
+        const failed = typeof notice.failed === 'number' ? notice.failed : 0
+        const updated = typeof notice.updated === 'number' ? notice.updated : 0
+        const detail = typeof notice.message === 'string' && notice.message !== '' ? notice.message : null
+        const text =
+          notice.kind === 'failed'
+            ? failed > 0
+              ? t('toastFailed', { failed })
+              : t('toastFailedDetail', { message: detail ?? '—' })
+            : failed > 0
+              ? t('toastUpdatedPartial', { updated, failed })
+              : t('toastUpdated', { updated })
+        return portalToBody(
+          h(
+            'div',
+            { style: styles.toast, role: notice.kind === 'failed' ? 'alert' : 'status', 'data-plugin-manager': 'notice-toast' },
+            h(
+              'div',
+              { style: styles.toastBody },
+              h('div', { style: styles.toastText }, text),
+              detail === null || (notice.kind === 'failed' && failed === 0)
+                ? null
+                : h('div', { style: styles.toastMessage, title: detail }, detail),
+            ),
+            h(
+              ControlButton,
+              { styles, variant: 'ghost', onClick: () => void autoStore.dismissNotice(notice.id), 'data-plugin-manager': 'notice-ack' },
+              t('noticeAck'),
+            ),
+          ),
         )
       }
     }
@@ -1097,12 +1772,13 @@ window.__ModuleLoader__.load({
         const t = (key, vars) => interpolate(DICTS[active]?.[key] ?? DICTS.zh[key] ?? key, vars)
 
         const store = createStore(t)
+        const autoStore = createAutoStore()
         const styles = makeStyles()
         const safe = makeSafe(t, styles)
         ctx.slots.inject('settings.section', () =>
           ctx.slots.register(
             { name: 'settings.section', id: 'dsh-plugin-manager-settings', order: 100, label: () => t('settingsNav') },
-            safe(makeSettingsSection(t, store, styles)),
+            safe(makeSettingsSection(t, store, autoStore, styles)),
           ),
         )
         ctx.slots.inject('plugins.detail.badge', () =>
@@ -1113,6 +1789,12 @@ window.__ModuleLoader__.load({
         )
         ctx.slots.inject('plugins.detail.section', () =>
           ctx.slots.register({ name: 'plugins.detail.section', id: 'dsh-plugin-manager-section', order: 60 }, safe(makeSection(t, store, styles))),
+        )
+        ctx.slots.inject('shell.overlay', () =>
+          ctx.slots.register(
+            { name: 'shell.overlay', id: 'dsh-plugin-manager-notice', order: 100 },
+            safe(makeNoticeOverlay(t, store, autoStore, styles)),
+          ),
         )
       },
     }

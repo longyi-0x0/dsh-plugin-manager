@@ -44,6 +44,8 @@ async function clientModule() {
   assert.equal(spec.id, 'dsh-plugin-manager')
   return spec.factory((id) => {
     if (id === 'react') return reactStub()
+    // 浮层要 portal 到 body：只校验形状，组件在测试里不渲染。
+    if (id === 'react-dom') return { createPortal: (node) => node }
     throw new Error(`多余的依赖：${id}`)
   })
 }
@@ -76,7 +78,7 @@ function fakeContext() {
   return { ctx, registrations }
 }
 
-test('客户端注册设置页一节与详情贡献，不注册页签/菜单/弹层', async () => {
+test('客户端注册设置页一节、详情贡献与通知浮层，不注册页签/添加菜单', async () => {
   const module = await clientModule()
   assert.deepEqual(module.inject, ['slots', 'locale'])
 
@@ -85,7 +87,7 @@ test('客户端注册设置页一节与详情贡献，不注册页签/菜单/弹
 
   assert.deepEqual(
     registrations.map((entry) => entry.name),
-    ['settings.section', 'plugins.detail.badge', 'plugins.detail.actions', 'plugins.detail.section'],
+    ['settings.section', 'plugins.detail.badge', 'plugins.detail.actions', 'plugins.detail.section', 'shell.overlay'],
   )
   assert.deepEqual(
     registrations.map((entry) => entry.options.id),
@@ -94,11 +96,13 @@ test('客户端注册设置页一节与详情贡献，不注册页签/菜单/弹
       'dsh-plugin-manager-badge',
       'dsh-plugin-manager-actions',
       'dsh-plugin-manager-section',
+      'dsh-plugin-manager-notice',
     ],
   )
   assert.equal(registrations[0].options.label(), '插件管理器')
-  for (const forbidden of ['plugins.tab', 'plugins.add.actions', 'shell.overlay']) {
-    assert.equal(registrations.some((entry) => entry.name === forbidden), false, `不应再注册 ${forbidden}`)
+  assert.equal(registrations[4].options.order, 100)
+  for (const forbidden of ['plugins.tab', 'plugins.add.actions']) {
+    assert.equal(registrations.some((entry) => entry.name === forbidden), false, `不应注册 ${forbidden}`)
   }
   for (const entry of registrations) assert.equal(typeof entry.component, 'function')
 })

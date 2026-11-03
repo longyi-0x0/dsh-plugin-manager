@@ -141,3 +141,120 @@ test('引擎抛错时 500 且带 message', async () => {
   assert.equal(response.statusCode, 500)
   assert.match(JSON.parse(response.body).error.message, /读不到 profile/)
 })
+
+function fakeAuto(state) {
+  const calls = { settings: [], dismiss: [], apply: 0 }
+  return {
+    calls,
+    state() {
+      calls.state = (calls.state ?? 0) + 1
+      return state
+    },
+    async updateSettings(patch) {
+      calls.settings.push(patch)
+      return { ...state, settings: { ...state.settings, ...patch } }
+    },
+    dismissNotice(id) {
+      calls.dismiss.push(id)
+      return null
+    },
+    async applyPending() {
+      calls.apply += 1
+      return { ok: true, updated: 1, failed: 0, notice: null }
+    },
+  }
+}
+
+const AUTO_STATE = {
+  settings: { startupCheck: false, scheduledCheck: false, autoUpdate: false },
+  auto: { running: false, lastCheckAt: null, lastCheckReason: null, nextCheckAt: null, lastResult: null },
+  notice: null,
+}
+
+test('GET /state：返回开关、自动检测状态与通知', async () => {
+  const auto = fakeAuto(AUTO_STATE)
+  const handler = createHandler(fakeEngine(), { auto })
+  const response = makeResponse()
+  await handler(makeRequest({ url: '/dsh-plugin-manager/api/state' }), response)
+  assert.equal(response.statusCode, 200)
+  assert.deepEqual(JSON.parse(response.body), AUTO_STATE)
+
+  const head = makeResponse()
+  await handler(makeRequest({ method: 'HEAD', url: '/dsh-plugin-manager/api/state' }), head)
+  assert.equal(head.statusCode, 200)
+  assert.equal(head.body, '')
+})
+
+test('POST /settings：只把布尔开关交给自动更新服务', async () => {
+  const auto = fakeAuto(AUTO_STATE)
+  const handler = createHandler(fakeEngine(), { auto })
+
+  const ok = makeResponse()
+  await handler(makeRequest({ method: 'POST', url: '/dsh-plugin-manager/api/settings', body: { autoUpdate: true } }), ok)
+  assert.equal(ok.statusCode, 200)
+  assert.deepEqual(auto.calls.settings, [{ autoUpdate: true }])
+  assert.equal(JSON.parse(ok.body).settings.autoUpdate, true)
+
+  const empty = makeResponse()
+  await handler(makeRequest({ method: 'POST', url: '/dsh-plugin-manager/api/settings', body: {} }), empty)
+  assert.deepEqual(auto.calls.settings.at(-1), {})
+
+  const invalid = makeResponse()
+  await handler(makeRequest({ method: 'POST', url: '/dsh-plugin-manager/api/settings', body: { autoUpdate: 'on' } }), invalid)
+  assert.equal(invalid.statusCode, 400)
+  assert.equal(auto.calls.settings.length, 2)
+})
+
+test('POST /notice/dismiss 与 /notice/apply：转给自动更新服务', async () => {
+  const auto = fakeAuto(AUTO_STATE)
+  const handler = createHandler(fakeEngine(), { auto })
+
+  const dismissed = makeResponse()
+  await handler(makeRequest({ method: 'POST', url: '/dsh-plugin-manager/api/notice/dismiss', body: { id: '7' } }), dismissed)
+  assert.equal(dismissed.statusCode, 200)
+  assert.deepEqual(JSON.parse(dismissed.body), { notice: null })
+  assert.deepEqual(auto.calls.dismiss, ['7'])
+
+  const withoutId = makeResponse()
+  await handler(makeRequest({ method: 'POST', url: '/dsh-plugin-manager/api/notice/dismiss', body: {} }), withoutId)
+  assert.equal(withoutId.statusCode, 200)
+  assert.deepEqual(auto.calls.dismiss, ['7', undefined])
+
+  const invalid = makeResponse()
+  await handler(makeRequest({ method: 'POST', url: '/dsh-plugin-manager/api/notice/dismiss', body: { id: 7 } }), invalid)
+  assert.equal(invalid.statusCode, 400)
+  assert.equal(JSON.parse(invalid.body).error.code, 'invalid-id')
+  assert.deepEqual(auto.calls.dismiss, ['7', undefined])
+
+  const applied = makeResponse()
+  await handler(makeRequest({ method: 'POST', url: '/dsh-plugin-manager/api/notice/apply' }), applied)
+  assert.equal(applied.statusCode, 200)
+  assert.deepEqual(JSON.parse(applied.body), { ok: true, updated: 1, failed: 0, notice: null })
+  assert.equal(auto.calls.apply, 1)
+})
+
+test('自动更新服务缺失时 503，方法不对时 405', async () => {
+  const handler = createHandler(fakeEngine())
+  for (const [method, url] of [
+    ['GET', '/dsh-plugin-manager/api/state'],
+    ['POST', '/dsh-plugin-manager/api/settings'],
+    ['POST', '/dsh-plugin-manager/api/notice/dismiss'],
+    ['POST', '/dsh-plugin-manager/api/notice/apply'],
+  ]) {
+    const response = makeResponse()
+    await handler(makeRequest({ method, url }), response)
+    assert.equal(response.statusCode, 503, `${method} ${url}`)
+  }
+
+  const withAuto = createHandler(fakeEngine(), { auto: fakeAuto(AUTO_STATE) })
+  for (const [method, url] of [
+    ['POST', '/dsh-plugin-manager/api/state'],
+    ['GET', '/dsh-plugin-manager/api/settings'],
+    ['GET', '/dsh-plugin-manager/api/notice/dismiss'],
+    ['GET', '/dsh-plugin-manager/api/notice/apply'],
+  ]) {
+    const response = makeResponse()
+    await withAuto(makeRequest({ method, url }), response)
+    assert.equal(response.statusCode, 405, `${method} ${url}`)
+  }
+})

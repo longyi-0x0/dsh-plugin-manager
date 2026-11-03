@@ -5,10 +5,11 @@
 # 同名 insert 会把它顶掉，插件页会变成「本部署没有可管理的 profile」。
 # 这条由 test/manifest.test.mjs 守住。
 #
-# 宿主入口负责两件事：
+# 宿主入口负责：
 #   1. 读出本 profile 里从 GitHub 安装的插件（依赖 spec + 锁文件里的 commit）；
-#   2. 通过 pluginManager 的 removeBundle / installBundle 按原 spec 重装。
-# 浏览器半侧挂在同一行上：在「添加插件」菜单里加入口，点开更新弹层，并给详情页贡献三个扩展点。
+#   2. 通过 pluginManager 的 removeBundle / installBundle 按原 spec 重装；
+#   3. 按设置做启动检测、每小时检测与自动更新，并把结果挂成通知给浏览器半侧。
+# 浏览器半侧挂在同一行上：设置页里三个开关与更新列表，发现更新时在 shell.overlay 里弹窗。
 - insert:
     - id: dsh-plugin-manager
       name: 'dsh-plugin-manager'
